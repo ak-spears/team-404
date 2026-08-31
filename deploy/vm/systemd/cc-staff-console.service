@@ -9,8 +9,10 @@
 [Unit]
 Description=Crimson Copies - staff-console (Next.js standalone)
 After=network.target
-After=docker.service
-Wants=docker.service
+# The native infra units this app's data path ultimately depends on (no Docker on
+# a VM tenant). Ordering after them avoids a cold-boot race on VM restart.
+After=mysql.service minio.service
+Wants=mysql.service minio.service
 
 [Service]
 Type=simple

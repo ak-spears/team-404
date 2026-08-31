@@ -193,13 +193,36 @@ spec:
         # platform-infra (tenants/team-team-404/vm/namespaces/vm-prod.yaml). Neither
         # change alone is sufficient — with the old 6Gi ceiling this VM still will not
         # start, and with the old chart the ceiling is asked for 17064Mi.
+        # ── QEMU NEEDS HEADROOM ABOVE THE GUEST'S RAM. ───────────────────────
+        # THIS VM WOULD BE OOM-KILLED BY ITS OWN `pnpm build`, and the crash looks
+        # like nothing at all: the VirtualMachineInstance crashes, the launcher pod
+        # is replaced, the guest cold-boots, and `kubectl get vmi` says Running again
+        # a minute later with NOTHING in the guest's own logs — because the guest did
+        # not fail, it was killed from outside by the cgroup OOM killer. Reproduced on
+        # the paper-papas tenant 2026-08-31; it also corrupted a half-initialised
+        # MySQL data directory on the way down.
+        #
+        # `requests == limits` with no `memory.guest` hands the guest EXACTLY the
+        # container's ask, and KubeVirt adds only its own overhead estimate (measured:
+        # a 4096Mi guest produced a 4496Mi container, ~400Mi of headroom). That
+        # estimate assumes KVM. This cluster runs useEmulation:true — QEMU TCG — where
+        # measured overhead was 559Mi idle and over 1.3Gi during a build, and QEMU's
+        # RSS only ratchets UP because a touched guest page stays resident on the host
+        # after the guest frees it.
+        #
+        # `memory.guest` is what the guest SEES; `resources` is what the container may
+        # HAVE. The guest still gets 4Gi. requests stays at 4Gi because `memory.guest`
+        # must lie between requests and limits.
+        memory:
+          guest: 4Gi
         resources:
           requests:
             # Guest RAM, reserved for the VM's whole lifetime (ADR-032 §5).
             memory: 4Gi
             cpu: "4"
           limits:
-            memory: 4Gi
+            # Guest RAM + hypervisor headroom. NOT the guest's size.
+            memory: 6Gi
             cpu: "4"
         devices:
           # virtio-rng. The cluster runs KubeVirt with useEmulation:true (QEMU TCG,

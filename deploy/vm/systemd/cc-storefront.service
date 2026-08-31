@@ -22,11 +22,10 @@
 [Unit]
 Description=Crimson Copies - storefront (Next.js standalone)
 After=network.target
-# Long-lived infra containers (MySQL/MinIO/Mailpit) that orders-api ultimately
-# depends on -- storefront itself only talks to orders-api's BFF, but ordering
-# after docker.service avoids a cold-boot race on VM restart.
-After=docker.service
-Wants=docker.service
+# The native infra units orders-api ultimately depends on. This app only talks to
+# orders-api's BFF, but ordering after them avoids a cold-boot race on VM restart.
+After=mysql.service minio.service
+Wants=mysql.service minio.service
 
 [Service]
 Type=simple
