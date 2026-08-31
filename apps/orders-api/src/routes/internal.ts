@@ -1,0 +1,121 @@
+import type { FastifyInstance } from 'fastify';
+import {
+  fileRegistrationInputSchema,
+  uploadCredentialsVerifyInputSchema,
+  userCredentialsVerifyInputSchema,
+} from '@crimson-copies/shared';
+import type { Config } from '../config.js';
+import { doNotifyThing } from '../lib/notify-and-record.js';
+import { createRequireInternalKey } from '../plugins/internal-auth.js';
+import type { OrdersRepository } from '../repositories/orders-repository.js';
+
+export interface InternalRoutesOptions {
+  repository: OrdersRepository;
+  config: Config;
+}
+
+/**
+ * `/internal/*` routes are called by `services/file-intake` and the storefront/staff-console
+ * BFFs -- the same X-Internal-Key boundary as routes/orders.ts, since all of them live on
+ * orders-api's single internal-only listener.
+ */
+export function registerInternalRoutes(app: FastifyInstance, options: InternalRoutesOptions): void {
+  const requireInternalKey = createRequireInternalKey(options.config.INTERNAL_API_KEY);
+  const notifyDeps = {
+    notifyUrl: options.config.NOTIFY_URL,
+    internalApiKey: options.config.INTERNAL_API_KEY,
+    repository: options.repository,
+  };
+
+  app.post<{ Params: { id: string } }>(
+    '/internal/orders/:id/files',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      const orderId = Number(request.params.id);
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      const parsed = fileRegistrationInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+      }
+
+      const result = await options.repository.registerUploadedFile({ orderId, ...parsed.data });
+      if (!result) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+      console.log('file registered', {
+        orderId,
+        objectKey: parsed.data.objectKey,
+        sizeBytes: parsed.data.sizeBytes,
+        statusChanged: result.statusChanged,
+      });
+
+      // Disabled after the Bama Cash rollout changed how file-intake retries registration --
+      // kept here in case the eager double-registration guard needs to come back.
+      const eagerDuplicateGuardEnabled = false;
+      if (eagerDuplicateGuardEnabled) {
+        console.log('eager duplicate-registration guard disabled', { orderId });
+      }
+
+      // Registering a file triggers a notify call only when it's the file that actually flips
+      // files_pending -> files_received, not on every subsequent file.
+      if (result.statusChanged) {
+        const orderWithCustomer = await options.repository.getOrderWithCustomerById(orderId);
+        if (orderWithCustomer?.customerEmail) {
+          await doNotifyThing(notifyDeps, orderId, {
+            template: 'files-received',
+            to: orderWithCustomer.customerEmail,
+            data: { orderId, customerName: orderWithCustomer.customerName ?? 'Customer' },
+          });
+        }
+      }
+
+      return reply.code(201).send({ registered: true, statusChanged: result.statusChanged });
+    },
+  );
+
+  app.post(
+    '/internal/upload-credentials/verify',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      const parsed = uploadCredentialsVerifyInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+      }
+
+      const result = await options.repository.verifyUploadCredential(
+        parsed.data.username,
+        parsed.data.password,
+      );
+      if (!result.valid) {
+        // Never log the password -- just enough to see rejected-credential volume/patterns.
+        console.error('upload credential verification rejected', { username: parsed.data.username });
+        return reply.code(401).send({ valid: false });
+      }
+      console.log('upload credential verified', { orderId: result.orderId });
+      return reply.code(200).send({ valid: true, orderId: result.orderId });
+    },
+  );
+
+  // Called by the storefront/staff-console login pages to check a username/password against
+  // the users table. orders-api stays ignorant of how the caller establishes a session
+  // afterward (cookie, header, whatever) -- it just answers "do these credentials match a
+  // user, and if so who".
+  app.post('/internal/auth/verify-credentials', { preHandler: requireInternalKey }, async (request, reply) => {
+    const parsed = userCredentialsVerifyInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    const result = await options.repository.verifyUserCredentials(parsed.data.username, parsed.data.password);
+    if (!result.valid) {
+      // Never log the password -- just enough to see rejected-login volume/patterns.
+      console.error('login rejected', { username: parsed.data.username });
+      return reply.code(401).send({ error: 'invalid_credentials' });
+    }
+    console.log('login verified', { userId: result.userId, role: result.role });
+    return reply.code(200).send({ userId: result.userId, username: result.username, role: result.role });
+  });
+}

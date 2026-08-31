@@ -1,0 +1,53 @@
+# Crimson Copies -- storefront (Next.js 15, standalone output)
+#
+# `next build` with outputFileTracingRoot set to the pnpm workspace root emits a
+# NESTED standalone tree -- the standalone ROOT (not just its apps/storefront/
+# subdir) holds the real `node_modules` that apps/storefront/server.js's symlinked
+# deps resolve into (next, react, etc., plus the workspace's packages/shared). The
+# deploy step (see docs/manual-deploy.md) rsyncs the WHOLE `.next/standalone/` tree
+# to WorkingDirectory's root, so `apps/storefront/server.js` sits under it with a
+# real, resolvable node_modules two levels up. `public/` and `.next/static/` are
+# then rsynced into the nested `apps/storefront/` dir separately -- Next's own
+# traced standalone output does not include them. Reviewer-caught regression
+# (fixed 2026-08-20): an earlier version rsynced ONLY the `apps/storefront/`
+# subdir, silently dropping node_modules and leaving ExecStart pointed at a path
+# one level too deep -- both a MODULE_NOT_FOUND on `next` and a separate
+# MODULE_NOT_FOUND on the ExecStart path itself. Reproduced and re-verified
+# against a real rsync-then-`node` run (not just read) before landing this fix.
+#
+# PORT/HOSTNAME are deployment topology (which local port Caddy proxies to), not a
+# secret, so they're set here rather than in the CI-rendered .env (the Caddyfile's
+# reverse_proxy localhost:3000 must match this PORT). Binding to 127.0.0.1 keeps
+# the Next server unreachable except via Caddy on the same host.
+[Unit]
+Description=Crimson Copies - storefront (Next.js standalone)
+After=network.target
+# Long-lived infra containers (MySQL/MinIO/Mailpit) that orders-api ultimately
+# depends on -- storefront itself only talks to orders-api's BFF, but ordering
+# after docker.service avoids a cold-boot race on VM restart.
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=crimsoncopies
+Group=crimsoncopies
+WorkingDirectory=/opt/crimsoncopies/storefront
+EnvironmentFile=/opt/crimsoncopies/storefront/.env
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node apps/storefront/server.js
+Restart=on-failure
+RestartSec=3
+
+# Baseline hardening -- a self-hosted Next.js server needs no privileges beyond its
+# own working directory and outbound network to orders-api.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crimsoncopies/storefront
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

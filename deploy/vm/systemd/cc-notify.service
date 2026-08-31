@@ -1,0 +1,29 @@
+# Crimson Copies -- notify (Fastify + nodemailer, isolated internal email service)
+#
+# INTERNAL ONLY -- never reverse-proxied by Caddy. Talks to Mailpit (docker, this VM)
+# in dev/staging, a real SMTP relay in prod. HOST/PORT (127.0.0.1:4100 by default)
+# come from the CI-rendered .env, same as services/notify/.env.example.
+[Unit]
+Description=Crimson Copies - notify (email service)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=crimsoncopies
+Group=crimsoncopies
+WorkingDirectory=/opt/crimsoncopies/notify
+EnvironmentFile=/opt/crimsoncopies/notify/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crimsoncopies/notify
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

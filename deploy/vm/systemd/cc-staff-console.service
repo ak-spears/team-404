@@ -1,0 +1,35 @@
+# Crimson Copies -- staff-console (Next.js 15, standalone output)
+#
+# Same whole-standalone-tree deploy layout as cc-storefront.service (see that
+# file's header for the full rationale + the reviewer-caught regression this fixes)
+# -- WorkingDirectory holds the ENTIRE `.next/standalone/` tree (real node_modules
+# included), and ExecStart points at the nested `apps/staff-console/server.js`
+# inside it. PORT=3001 keeps it off storefront's 3000 on the same VM; matches the
+# Caddyfile's staff.__TEAM__...  { reverse_proxy localhost:3001 }.
+[Unit]
+Description=Crimson Copies - staff-console (Next.js standalone)
+After=network.target
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=crimsoncopies
+Group=crimsoncopies
+WorkingDirectory=/opt/crimsoncopies/staff-console
+EnvironmentFile=/opt/crimsoncopies/staff-console/.env
+Environment=PORT=3001
+Environment=HOSTNAME=127.0.0.1
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node apps/staff-console/server.js
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crimsoncopies/staff-console
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

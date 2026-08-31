@@ -1,0 +1,27 @@
+{
+  "name": "@crimson-copies/staff-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "node .next/standalone/apps/staff-console/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@crimson-copies/shared": "workspace:*",
+    "minio": "^8.0.7",
+    "next": "15.5.23",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,445 @@
+import { randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import {
+  isValidStatusTransition,
+  type OrderEventActor,
+  type OrderStatus,
+  type PaymentMethod,
+  type ServiceType,
+} from '@crimson-copies/shared';
+import { calculatePriceCents } from '@crimson-copies/shared';
+import type { Db } from '../db/client.js';
+import { customers, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.js';
+
+const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface OrderRecord {
+  id: number;
+  customerId: number | null;
+  serviceType: ServiceType;
+  quantity: number;
+  specNotes: string | null;
+  paymentMethod: PaymentMethod;
+  priceCents: number | null;
+  status: OrderStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  pickupReadyAt: Date | null;
+  completedAt: Date | null;
+}
+
+export interface OrderWithCustomer extends OrderRecord {
+  customerName: string | null;
+  customerEmail: string | null;
+  userId: number | null;
+}
+
+export interface CreateOrderParams {
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string | undefined;
+  serviceType: ServiceType;
+  quantity: number;
+  specNotes?: string | undefined;
+  paymentMethod: PaymentMethod;
+  /**
+   * The signed-in user id from the trusted `X-User-Id` header -- absent for guest orders,
+   * present once the calling BFF has verified a local session. orders-api stays ignorant of how
+   * that session was established (cookie, header, whatever the web layer uses); this is just an
+   * id it links customers by.
+   */
+  userId?: number | undefined;
+}
+
+export interface UploadInstructionsResult {
+  username: string;
+  plaintextPassword: string;
+  expiresAt: Date;
+}
+
+export interface CreateOrderResult {
+  order: OrderRecord;
+  uploadCredential: UploadInstructionsResult;
+}
+
+export interface ListOrdersFilter {
+  status?: OrderStatus | undefined;
+  /** Filters to orders belonging to the customer linked to this user id. */
+  userId?: number | undefined;
+}
+
+export interface RegisterUploadedFileParams {
+  orderId: number;
+  objectKey: string;
+  originalFilename: string;
+  sizeBytes: number;
+}
+
+export interface RegisterUploadedFileResult {
+  order: OrderRecord;
+  /** True when this file registration was the one that flipped files_pending -> files_received. */
+  statusChanged: boolean;
+}
+
+export type VerifyUploadCredentialResult = { valid: true; orderId: number } | { valid: false };
+
+export type VerifyUserCredentialsResult =
+  | { valid: true; userId: number; username: string; role: 'customer' | 'staff' }
+  | { valid: false };
+
+export interface UpdateOrderStatusParams {
+  orderId: number;
+  status: OrderStatus;
+  actor: OrderEventActor;
+}
+
+/** Thrown by `updateOrderStatus` when `status` isn't reachable from the order's current status. */
+export class InvalidStatusTransitionError extends Error {
+  constructor(
+    public readonly from: OrderStatus,
+    public readonly to: OrderStatus,
+  ) {
+    super(`Cannot transition order from '${from}' to '${to}'`);
+    this.name = 'InvalidStatusTransitionError';
+  }
+}
+
+export interface OrderFileRecord {
+  id: number;
+  objectKey: string;
+  originalFilename: string;
+  sizeBytes: number;
+  uploadedAt: Date;
+}
+
+export interface OrdersRepository {
+  createOrder(params: CreateOrderParams): Promise<CreateOrderResult>;
+  getOrderById(id: number): Promise<OrderRecord | null>;
+  getOrderWithCustomerById(id: number): Promise<OrderWithCustomer | null>;
+  listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]>;
+  /** `order_files` rows for an order, oldest first -- staff-console presigns MinIO GETs from `objectKey`. */
+  listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
+  registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
+  verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
+  verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+  updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
+  /** Generic append-only audit trail write (order_events). */
+  recordEvent(
+    orderId: number,
+    eventType: string,
+    actor: OrderEventActor,
+    payload?: Record<string, unknown>,
+  ): Promise<void>;
+}
+
+/**
+ * Generates a one-time SFTP upload password. Not a bcrypt input constraint -- just needs to be
+ * hard to guess and easy enough for a customer to paste into an SFTP client. One-time,
+ * per-order, bcrypt-hashed at rest, 7-day expiry.
+ */
+function generateUploadPassword(): string {
+  return randomBytes(18).toString('base64url');
+}
+
+export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepository {
+  async function getOrderById(id: number): Promise<OrderRecord | null> {
+    const [row] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async function recordEvent(
+    orderId: number,
+    eventType: string,
+    actor: OrderEventActor,
+    payload?: Record<string, unknown>,
+  ): Promise<void> {
+    await db.insert(orderEvents).values({
+      orderId,
+      eventType,
+      actor,
+      payloadJson: payload ?? null,
+    });
+  }
+
+  return {
+    async createOrder(params) {
+      const priceCents = calculatePriceCents(params.serviceType, params.quantity);
+      const plaintextPassword = generateUploadPassword();
+      const passwordHash = await bcrypt.hash(plaintextPassword, bcryptRounds);
+      const expiresAt = new Date(Date.now() + UPLOAD_CREDENTIAL_TTL_MS);
+
+      const orderId = await db.transaction(async (tx) => {
+        // When the BFF has verified a local session, X-User-Id links this order to a
+        // persistent customer identity (find-or-create by user_id, which db/schema.ts declares
+        // UNIQUE); with no session, every order is a guest order -- a fresh customer row with
+        // user_id left null, since orders itself has no columns for contact info.
+        let customerId: number;
+        if (params.userId) {
+          const [existing] = await tx
+            .select()
+            .from(customers)
+            .where(eq(customers.userId, params.userId))
+            .limit(1);
+          if (existing) {
+            customerId = existing.id;
+          } else {
+            try {
+              const [inserted] = await tx.insert(customers).values({
+                userId: params.userId,
+                name: params.customerName,
+                email: params.customerEmail,
+                phone: params.customerPhone ?? null,
+              });
+              customerId = inserted.insertId;
+            } catch (err) {
+              // Lost a race with a concurrent first-order-ever request for the same signed-in
+              // user -- user_id is UNIQUE, so fall back to whichever row won.
+              const [raceWinner] = await tx
+                .select()
+                .from(customers)
+                .where(eq(customers.userId, params.userId))
+                .limit(1);
+              if (!raceWinner) throw err;
+              customerId = raceWinner.id;
+            }
+          }
+        } else {
+          const [inserted] = await tx.insert(customers).values({
+            name: params.customerName,
+            email: params.customerEmail,
+            phone: params.customerPhone ?? null,
+          });
+          customerId = inserted.insertId;
+        }
+
+        const [orderResult] = await tx.insert(orders).values({
+          customerId,
+          serviceType: params.serviceType,
+          quantity: params.quantity,
+          specNotes: params.specNotes ?? null,
+          paymentMethod: params.paymentMethod,
+          priceCents,
+        });
+        const newOrderId = orderResult.insertId;
+
+        await tx.insert(orderUploadCredentials).values({
+          orderId: newOrderId,
+          username: String(newOrderId),
+          passwordHash,
+          expiresAt,
+        });
+
+        await tx.insert(orderEvents).values({
+          orderId: newOrderId,
+          eventType: 'created',
+          actor: 'customer',
+          payloadJson: { serviceType: params.serviceType, quantity: params.quantity },
+        });
+
+        return newOrderId;
+      });
+
+      const order = await getOrderById(orderId);
+      if (!order) {
+        throw new Error(`Order ${orderId} was created but could not be re-read`);
+      }
+
+      return {
+        order,
+        uploadCredential: { username: String(orderId), plaintextPassword, expiresAt },
+      };
+    },
+
+    getOrderById,
+
+    async getOrderWithCustomerById(id) {
+      const [row] = await db
+        .select({
+          id: orders.id,
+          customerId: orders.customerId,
+          serviceType: orders.serviceType,
+          quantity: orders.quantity,
+          specNotes: orders.specNotes,
+          paymentMethod: orders.paymentMethod,
+          priceCents: orders.priceCents,
+          status: orders.status,
+          createdAt: orders.createdAt,
+          updatedAt: orders.updatedAt,
+          pickupReadyAt: orders.pickupReadyAt,
+          completedAt: orders.completedAt,
+          customerName: customers.name,
+          customerEmail: customers.email,
+          userId: customers.userId,
+        })
+        .from(orders)
+        .leftJoin(customers, eq(orders.customerId, customers.id))
+        .where(eq(orders.id, id))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async listOrders(filter) {
+      const conditions = [];
+      if (filter.status) conditions.push(eq(orders.status, filter.status));
+
+      if (filter.userId !== undefined) {
+        const query = db
+          .select({
+            id: orders.id,
+            customerId: orders.customerId,
+            serviceType: orders.serviceType,
+            quantity: orders.quantity,
+            specNotes: orders.specNotes,
+            paymentMethod: orders.paymentMethod,
+            priceCents: orders.priceCents,
+            status: orders.status,
+            createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
+            pickupReadyAt: orders.pickupReadyAt,
+            completedAt: orders.completedAt,
+          })
+          .from(orders)
+          .innerJoin(customers, eq(orders.customerId, customers.id))
+          .orderBy(desc(orders.id));
+        return query.where(and(eq(customers.userId, filter.userId), ...conditions));
+      }
+
+      const query = db.select().from(orders).orderBy(desc(orders.id));
+      if (conditions.length === 0) return query;
+      return query.where(and(...conditions));
+    },
+
+    async listOrderFiles(orderId) {
+      return db
+        .select({
+          id: orderFiles.id,
+          objectKey: orderFiles.objectKey,
+          originalFilename: orderFiles.originalFilename,
+          sizeBytes: orderFiles.sizeBytes,
+          uploadedAt: orderFiles.uploadedAt,
+        })
+        .from(orderFiles)
+        .where(eq(orderFiles.orderId, orderId))
+        .orderBy(orderFiles.uploadedAt);
+    },
+
+    async registerUploadedFile(params) {
+      const res = await db.transaction(async (tx) => {
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        if (!order) return null;
+
+        await tx.insert(orderFiles).values({
+          orderId: params.orderId,
+          objectKey: params.objectKey,
+          originalFilename: params.originalFilename,
+          sizeBytes: params.sizeBytes,
+        });
+        await tx.insert(orderEvents).values({
+          orderId: params.orderId,
+          eventType: 'file_uploaded',
+          actor: 'customer',
+          payloadJson: {
+            objectKey: params.objectKey,
+            originalFilename: params.originalFilename,
+            sizeBytes: params.sizeBytes,
+          },
+        });
+
+        // Flips files_pending -> files_received -- a no-op (file recorded, status untouched)
+        // for any other current status, e.g. a second file on an already-files_received order.
+        let statusChanged = false;
+        if (order.status === 'files_pending' && isValidStatusTransition('files_pending', 'files_received')) {
+          await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
+          await tx.insert(orderEvents).values({
+            orderId: params.orderId,
+            eventType: 'status_changed',
+            actor: 'system',
+            payloadJson: { from: 'files_pending', to: 'files_received' },
+          });
+          statusChanged = true;
+        }
+
+        return statusChanged;
+      });
+
+      if (res === null) return null;
+      const order = await getOrderById(params.orderId);
+      if (!order) return null;
+      return { order, statusChanged: res };
+    },
+
+    async verifyUploadCredential(username, password) {
+      // Single-use: only a credential that hasn't been used yet and hasn't expired is eligible.
+      // The UPDATE below is itself the single-use guard -- it only succeeds (affectedRows > 0)
+      // the first time, closing the race between two concurrent verify attempts with the same
+      // credential.
+      const [credential] = await db
+        .select()
+        .from(orderUploadCredentials)
+        .where(and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)))
+        .limit(1);
+
+      if (!credential || credential.expiresAt.getTime() < Date.now()) {
+        return { valid: false };
+      }
+
+      const passwordMatches = await bcrypt.compare(password, credential.passwordHash);
+      if (!passwordMatches) return { valid: false };
+
+      const [updateResult] = await db
+        .update(orderUploadCredentials)
+        .set({ usedAt: new Date() })
+        .where(and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)));
+      if (updateResult.affectedRows === 0) {
+        // Lost the race to another concurrent verify call for the same one-time credential.
+        return { valid: false };
+      }
+
+      return { valid: true, orderId: credential.orderId };
+    },
+
+    async verifyUserCredentials(username, password) {
+      const normalizedUsername = username.trim().toLowerCase();
+      const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
+      if (!user) return { valid: false };
+
+      const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordMatches) return { valid: false };
+
+      return { valid: true, userId: user.id, username: user.username, role: user.role };
+    },
+
+    async updateOrderStatus(params) {
+      return db.transaction(async (tx) => {
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        if (!order) return null;
+
+        if (!isValidStatusTransition(order.status, params.status)) {
+          throw new InvalidStatusTransitionError(order.status, params.status);
+        }
+
+        const timestampUpdates: Partial<{ pickupReadyAt: Date; completedAt: Date }> = {};
+        if (params.status === 'ready_for_pickup') timestampUpdates.pickupReadyAt = new Date();
+        if (params.status === 'completed') timestampUpdates.completedAt = new Date();
+
+        await tx
+          .update(orders)
+          .set({ status: params.status, ...timestampUpdates })
+          .where(eq(orders.id, params.orderId));
+
+        await tx.insert(orderEvents).values({
+          orderId: params.orderId,
+          eventType: 'status_changed',
+          actor: params.actor,
+          payloadJson: { from: order.status, to: params.status },
+        });
+
+        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        return updated ?? null;
+      });
+    },
+
+    recordEvent,
+  };
+}

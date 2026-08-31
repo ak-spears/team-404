@@ -1,0 +1,22 @@
+# Crimson Copies -- VM reverse proxy
+#
+# This VM has exactly ONE environment (dev; there is never a staging/prod VM), so
+# this is the whole Caddyfile, not a template rendered per-env. Replace __TEAM__
+# with the team's slug (e.g. team1, team2, ...) before deploying.
+#
+# orders-api and notify are NOT reverse-proxied here -- both are internal-only,
+# never a public hostname (see docs/manual-deploy.md).
+
+storefront.__TEAM__.crimsoncopies.dev.uamishub.com {
+	reverse_proxy localhost:3000
+}
+
+staff.__TEAM__.crimsoncopies.dev.uamishub.com {
+	reverse_proxy localhost:3001
+}
+
+# Mailpit web UI -- dev-only convenience to see the email the app sent, not part
+# of the app's own surface.
+mail.__TEAM__.crimsoncopies.dev.uamishub.com {
+	reverse_proxy localhost:8025
+}

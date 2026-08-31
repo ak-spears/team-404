@@ -1,0 +1,48 @@
+# ci.yml -- install -> typecheck -> lint -> build.
+#
+# No test job exists yet. "Green" means install+typecheck+lint+build only.
+#
+# RUNNER LABEL: `ua-mis-kaniko` is the platform's ORG-WIDE shared ARC scale set --
+# crimson-copies is not a capstone tenant, so it shares the same org-wide pool every
+# non-tenant build uses.
+#
+# CONTAINER-MODE REQUIREMENT: the ARC scale set is containerMode:kubernetes -- every
+# job MUST declare a `container:` or the runner hard-fails at "Set up job".
+# node:22-alpine matches this repo's own Node version.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ua-mis-kaniko
+    container:
+      image: node:22-alpine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Enable corepack + activate the pinned pnpm version
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build

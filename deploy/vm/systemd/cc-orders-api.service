@@ -1,0 +1,31 @@
+# Crimson Copies -- orders-api (Fastify, Node, sole MySQL writer)
+#
+# INTERNAL ONLY -- never reverse-proxied by Caddy. HOST/PORT (127.0.0.1:4000 by
+# default) come from the CI-rendered .env, same as the repo's own
+# apps/orders-api/.env.example -- this unit adds no topology env of its own.
+[Unit]
+Description=Crimson Copies - orders-api (Fastify)
+After=network.target docker.service
+Wants=docker.service
+# MySQL runs as a long-lived docker container on this VM; orders-api is the only
+# service that touches it directly.
+
+[Service]
+Type=simple
+User=crimsoncopies
+Group=crimsoncopies
+WorkingDirectory=/opt/crimsoncopies/orders-api
+EnvironmentFile=/opt/crimsoncopies/orders-api/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crimsoncopies/orders-api
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
