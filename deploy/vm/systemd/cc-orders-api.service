@@ -5,10 +5,11 @@
 # apps/orders-api/.env.example -- this unit adds no topology env of its own.
 [Unit]
 Description=Crimson Copies - orders-api (Fastify)
-After=network.target docker.service
-Wants=docker.service
-# MySQL runs as a long-lived docker container on this VM; orders-api is the only
-# service that touches it directly.
+After=network.target mysql.service
+Wants=mysql.service
+# MySQL runs NATIVELY on this VM (noble's mysql-server, installed by the guest's
+# cloud-init), not as a container -- a VM tenant has no Docker. orders-api is the
+# only service that touches it directly.
 
 [Service]
 Type=simple

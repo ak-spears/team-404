@@ -51,17 +51,79 @@ There is no test step — see `.github/workflows/ci.yml`, which runs exactly the
 
 ## Running on the VM
 
-Your team has one VM (there is never a staging or production VM). The app runs on it as
-four systemd units — `cc-storefront`, `cc-staff-console`, `cc-orders-api`, `cc-notify`
-(see `deploy/vm/systemd/`) — behind Caddy (`deploy/vm/Caddyfile`).
+Your team has one VM (there is never a staging or production VM). It is already set up:
+the VM's cloud-init installs the whole runtime on first boot, so you do **not** install
+Node, MySQL, MinIO or Caddy yourself. There is **no Docker on the VM** — `docker compose`
+is for your laptop only. On the VM those services are installed natively.
 
-The by-hand deploy loop, first-time bring-up, and secret handling are in:
+Already on the box when you first log in:
 
-- **`docs/manual-deploy.md`** — the deploy/recovery runbook.
-- **`docs/manual-secrets.md`** — how the `.env` files are populated (start from `.env.example`).
+| | |
+|---|---|
+| Node 22 + pnpm 9 | `node -v`, `pnpm -v` |
+| MySQL 8.0 | database `crimson_copies`, user `crimson_copies`, loopback only |
+| MinIO | `127.0.0.1:9000`, bucket `order-files` already created |
+| Caddy | listening on `:80` — the only public door into the VM |
+| your `.env` files | generated per-VM in `/etc/capstone/env/`, secrets already matched across services |
 
-> `deploy/vm/Caddyfile` still has `__TEAM__` placeholders and hostnames from the app's
-> original home. Reconcile them with your team's actual hostname before you rely on it.
+### Deploy
+
+```bash
+gh auth login                                        # device flow, in your browser
+git clone https://github.com/UA-MIS/team-404 ~/team-404
+sudo capstone-app-deploy                             # env, install, migrate, seed, build, start
+```
+
+That is the whole first-time bring-up. `capstone-app-deploy` does the steps in
+`docs/manual-deploy.md` for you, on the box, and prints a health check per service at the
+end. Re-run it after any change — it is idempotent.
+
+> **The first deploy takes roughly 30–45 minutes**, almost all of it `next build`. The
+> cluster runs these VMs without hardware virtualisation, so the CPU is emulated and
+> builds are far slower than on your laptop. Run it under `tmux` (or `nohup`) so a
+> dropped console does not kill it. Later deploys are faster — only what changed rebuilds.
+
+Then open **https://team-404.capstone.uamishub.com/** — that is the storefront.
+Sign in with the seeded demo accounts (`staff` / `staffpass123`, `customer` /
+`customerpass123`; see `apps/orders-api/README.md`).
+
+### Doing it by hand instead
+
+`capstone-app-deploy` is a convenience, not a black box — the individual steps still work
+and are worth running once to see what it does:
+
+```bash
+cd ~/team-404
+pnpm install --frozen-lockfile
+pnpm --filter @crimson-copies/orders-api run db:migrate
+pnpm --filter @crimson-copies/orders-api run db:seed
+pnpm build
+sudo capstone-app-deploy          # staging + systemd is the fiddly part; let it do that
+```
+
+`db:migrate` and `db:seed` must run **from this clone**, not from `/opt/crimsoncopies/` —
+they run through `tsx`, which is a dev dependency, and the deployed copy has production
+dependencies only.
+
+### Where things are
+
+- Units: `cc-storefront`, `cc-staff-console`, `cc-orders-api`, `cc-notify`
+  (`deploy/vm/systemd/`, installed to `/etc/systemd/system/` by the deploy script).
+- Deployed code: `/opt/crimsoncopies/<service>/`, running as the `crimsoncopies` user.
+- Logs: `journalctl -u cc-storefront -f` (and likewise per service).
+- Guest build log: `/var/log/capstone-lab-install.log` — what cloud-init installed and
+  whether any of it failed.
+
+`docs/manual-deploy.md` remains the reference for the underlying steps and for rollback;
+`docs/manual-secrets.md` describes the `.env` contents (already rendered for you on the VM).
+
+> **`deploy/vm/Caddyfile` is coursework and is deliberately still unfinished.** It has
+> `__TEAM__` placeholders and three hostnames from the app's original home
+> (`storefront.`/`staff.`/`mail.<team>.crimsoncopies.dev.uamishub.com`). Your VM has
+> exactly **one** public hostname, so the config actually serving traffic is the one
+> cloud-init installs at `/etc/caddy/Caddyfile`, which sends `:80` to the storefront.
+> Reconciling the repo's Caddyfile with the VM's real topology is your exercise — nobody
+> has done it for you.
 
 ## Reaching the VM over SSH
 

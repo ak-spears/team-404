@@ -1,12 +1,18 @@
-# Crimson Copies -- notify (Fastify + nodemailer, isolated internal email service)
+# Crimson Copies -- notify (Fastify, internal notification service)
 #
-# INTERNAL ONLY -- never reverse-proxied by Caddy. Talks to Mailpit (docker, this VM)
-# in dev/staging, a real SMTP relay in prod. HOST/PORT (127.0.0.1:4100 by default)
-# come from the CI-rendered .env, same as services/notify/.env.example.
+# INTERNAL ONLY -- never reverse-proxied by Caddy. HOST/PORT (127.0.0.1:4100 by
+# default) come from the rendered .env, same as services/notify/.env.example.
+#
+# THIS SERVICE SENDS NO EMAIL YET. It is a stub: routes/send.ts validates its
+# input, logs "[stub] would send ...", and returns 202. There is no nodemailer
+# dependency and its config schema (HOST, PORT, INTERNAL_API_KEY) has nowhere to
+# put an SMTP host. An earlier version of this comment claimed "Fastify +
+# nodemailer" and "Talks to Mailpit", which sent a VM build off installing a mail
+# catcher nothing connects to. Wiring real SMTP is a future change to the CODE,
+# and this comment should change with it -- not before.
 [Unit]
 Description=Crimson Copies - notify (email service)
-After=network.target docker.service
-Wants=docker.service
+After=network.target
 
 [Service]
 Type=simple
