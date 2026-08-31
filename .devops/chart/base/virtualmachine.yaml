@@ -1,0 +1,275 @@
+# VirtualMachine — your app, running as a REAL VM inside the cluster (ADR-032).
+#
+# This is the "no Docker" equivalent of a Deployment: instead of a container image
+# built from a Dockerfile, the workload is a full guest OS. CDI imports a base disk
+# image (dataVolumeTemplates below) onto ceph-block, and cloud-init (the secretRef
+# volume -> .devops/chart/base/cloud-init.yaml) installs + starts YOUR app on first
+# boot. A Service + Ingress (this dir) give it the standard <app>.<domain> URL.
+#
+# WHAT YOU EDIT:
+#   - .devops/chart/base/cloud-init.yaml  — install your runtime/DB/services (first boot).
+#   - the `source:` below                 — point at YOUR base disk image (or an http URL).
+#   - .devops/vm-metadata.yaml            — the sizing knobs (mirror of cpu/mem/disk/port).
+# Everything else (Service/Ingress wiring, labels, the GitOps tier) is platform-managed.
+#
+# Manifest shapes verified via Context7 (/kubevirt/user-guide, 2026-06-28):
+# kubevirt.io/v1 VirtualMachine + cdi.kubevirt.io/v1beta1 DataVolume (dataVolumeTemplates),
+# cloudInitNoCloud.secretRef (secret key `userdata`), masquerade pod networking,
+# kubevirt.io/domain label as the Service selector, runStrategy.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: team-404
+  labels:
+    app.kubernetes.io/name: team-404
+spec:
+  # Always = keep the VM running, restart on failure (the "it just runs" power state).
+  # Alternatives (verified): Halted (defined but off), Manual (virtctl start/stop),
+  # RerunOnFailure.
+  runStrategy: Always
+
+  # CDI imports the base disk image into a PVC on ceph-block (RBD). The PVC is created
+  # AND deleted with the VM (template lifecycle). RBD is RWO (single-node attach — no
+  # live-migration on this storage class, ADR-032 §5/open Q3).
+  #
+  # volumeMode: Filesystem (NOT Block): the CDI importer writes a raw disk.img onto a
+  # filesystem PVC, which needs no raw-block privilege and so runs under the VM-tier
+  # baseline PSA. Block mode requires a privileged importer (it does `blockdev` on
+  # /dev/cdi-block-volume) that baseline PSA correctly denies -> importer
+  # CrashLoopBackOff ("Permission denied"). The VM boots fine from the file-backed
+  # PVC (CDI names the image disk.img, raw format, uid 107). Minor tradeoff: a thin
+  # filesystem layer + ~10% FS overhead vs raw RBD block — negligible at capstone
+  # scale. Confirmed via Context7 /kubevirt/containerized-data-importer +
+  # /kubevirt/user-guide (CDI v1.65 / KubeVirt v1.8.4, 2026-06-28).
+  dataVolumeTemplates:
+    - metadata:
+        name: team-404-rootdisk
+      spec:
+        storage:
+          accessModes:
+            - ReadWriteOnce
+          volumeMode: Filesystem
+          storageClassName: ceph-block
+          resources:
+            requests:
+              storage: 30Gi
+        source:
+          # BRING-YOUR-OWN DISK: a KubeVirt containerDisk in a registry. Override with
+          # your own image. For an http(s) cloud-image instead, replace this whole
+          # `registry:` block with:
+          #     http:
+          #       url: https://example.com/path/your-cloud-image.qcow2
+          # For a PRIVATE containerDisk in your team's Harbor project, add:
+          #     registry:
+          #       url: docker://quay.io/containerdisks/ubuntu:24.04-2608270208
+          #       secretRef: harbor-pull   # minted at onboarding (see the onboarding PR)
+          registry:
+            # dump-quoted (D-108 sweep, deck-reviewer finding): this is the LOAD-BEARING
+            # copy -- the actual DataVolume source CDI imports from. baseImage is
+            # unconstrained free text (a docker://host/repo:tag ref); unquoted, a
+            # colon+space or a trailing comment breaks this field's YAML the same way
+            # description broke catalog-info.yaml.
+            url: "docker://quay.io/containerdisks/ubuntu:24.04-2608270208"
+
+  template:
+    metadata:
+      labels:
+        # The Service (service.yaml) selects the VMI's launcher pod on THIS label.
+        kubevirt.io/domain: team-404
+        app.kubernetes.io/name: team-404
+    spec:
+      # ── PLACEMENT — VMs run on the CONTROL-PLANE nodes, one per node. ─────
+      # A VM is PERMANENT and IMMOVABLE: it reserves its full cpu/memory for its
+      # whole lifetime (see resources below) and RBD is RWO, so it cannot live-
+      # migrate. Build runners are the opposite — ephemeral, and they schedule
+      # anywhere. Leaving VMs on the workers therefore inverts the shape: the
+      # immovable thing squats on the nodes that exist for flexible work, and the
+      # flexible work hits a capacity wall. Measured 2026-08-27, before this
+      # change: capstone-w1 76% / w2 74% of CPU REQUESTS, of which 4.0 and 6.0
+      # cores respectively were VMs, while capstone-n1/n2/n3 sat at 28-30%
+      # requests and 4-5% ACTUAL CPU with ~11 cores free each.
+      #
+      # The control-plane taint is capstone.io/control-plane=true:PreferNoSchedule
+      # — SOFT, so NO toleration is needed here. (Verified on all three nodes,
+      # 2026-08-28. If that taint is ever hardened to NoSchedule, this VM stops
+      # scheduling and a matching toleration must be added.)
+      #
+      # Keep this block in sync with the blueprint it was scaffolded from:
+      # platform-infra platform-services/backstage/templates/vm-app/skeleton-vm/
+      #   .devops/chart/base/virtualmachine.yaml
+      affinity:
+        nodeAffinity:
+          # required, not preferred: a soft rule would silently fall back to a
+          # worker and recreate exactly the wall this exists to prevent.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+        podAntiAffinity:
+          # One VM per node. Without this, three VMs can stack on n1 and rebuild
+          # the wall somewhere new.
+          #
+          # namespaceSelector: {} IS LOAD-BEARING. Each VM tenant lives in its own
+          # <team>-vm-prod namespace, and podAntiAffinity defaults to matching only
+          # the pod's OWN namespace. Without this line the rule would compare this
+          # VM against nothing but itself and spread NOTHING, while still looking
+          # correct in review. {} means "all namespaces".
+          #
+          # CAPACITY CLIFF, deliberate and documented: this is `required`, and
+          # there are three control-plane nodes. The FOURTH VM tenant will not
+          # schedule — and per the resources comment below, that failure is
+          # near-invisible (VirtualMachine sits at `Starting`, VMI at `Pending`,
+          # no pod to inspect). Before onboarding a fourth VM team, either add a
+          # control-plane node or relax this to
+          # preferredDuringSchedulingIgnoredDuringExecution (weight: 100).
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              namespaceSelector: {}
+              labelSelector:
+                matchExpressions:
+                  # every virt-launcher pod carries this, regardless of tenant.
+                  - key: kubevirt.io
+                    operator: In
+                    values:
+                      - virt-launcher
+
+      # DNS — NOT optional, and NOT the cluster default. A VM's traffic leaves the
+      # guest through the masquerade interface and never passes through a host
+      # socket, so Cilium's socket load-balancer never runs and the kube-dns
+      # ClusterIP (10.96.0.10) is never translated. The guest resolves NOTHING
+      # while every pod in the same namespace resolves fine, and no NetworkPolicy
+      # can fix it — a policy can allow an address, it cannot translate one.
+      # Public resolvers + dnsPolicy:None is the shape the live reference VM runs.
+      # See tenants/_template-vm/vm/namespaces/vm-prod.yaml, NetworkPolicy 4/5.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 1.0.0.1
+      domain:
+        cpu:
+          # vCPUs RESERVED for the VM's whole lifetime (no overcommit). Mirror in
+          # .devops/vm-metadata.yaml.
+          #
+          # RIGHT-SIZED 8 -> 4 on 2026-08-27 against MEASURED guest usage, not a guess:
+          # fresh guest 1537Mi, install+build PEAK 2203Mi, idle CPU 14m. The original
+          # 8/8Gi was carried over from a hand-tuned reference VM and was never
+          # justified by this workload. 4Gi leaves ~1.8Gi headroom over the measured
+          # peak.
+          #
+          # This mattered at the CLUSTER level, not just here: reserved (not used) is
+          # what the scheduler counts, and at 8 cores this single VM held 51% of
+          # capstone-w1, which sat at 98% of requests while running at 4-5% actual CPU.
+          # Shrinking is quota-safe in a way growing is not — the namespace LimitRange
+          # has max 12/12Gi and NO min, so unlike the 6Gi->12Gi episode described
+          # below, this needs no paired platform-infra change.
+          cores: 4
+        # ── RESOURCES — all four values, deliberately. ────────────────────────
+        # This chart previously declared `requests.memory` only, and the VM could not
+        # start. Observed on this VM, 2026-08-27, once the disk import finished:
+        #
+        #   Error creating pod: pods "virt-launcher-team-404-hv7dh" is forbidden:
+        #   [maximum cpu usage per Container is 4, but limit is 8,
+        #    maximum memory usage per Container is 6Gi, but limit is 17064Mi]
+        #
+        # Note the 17064Mi. With no memory LIMIT declared, KubeVirt derives a launcher
+        # limit of roughly TWICE the guest RAM. The reference VM, which declares one,
+        # gets an 8532Mi container for the same 8Gi guest (guest + ~340Mi KubeVirt
+        # overhead). So declaring the limit does not merely add a field — it HALVES
+        # what the namespace is asked for.
+        #
+        # There is nothing to inspect while this is broken: the VirtualMachine sits at
+        # `Starting` and the VMI at `Pending` with no pod and no CrashLoop, because the
+        # launcher is refused at admission and never created. Only namespace events
+        # carry the reason.
+        #
+        # request == limit for both. Guaranteed QoS is NOT the reason (it is
+        # unreachable — KubeVirt adds an ephemeral-storage request with no matching
+        # limit, so the launcher is Burstable regardless); it is simply the shape the
+        # platform skeleton now emits for every VM.
+        #
+        # PAIRED CHANGE: this needs the namespace quota + LimitRange raised to 12Gi in
+        # platform-infra (tenants/team-team-404/vm/namespaces/vm-prod.yaml). Neither
+        # change alone is sufficient — with the old 6Gi ceiling this VM still will not
+        # start, and with the old chart the ceiling is asked for 17064Mi.
+        resources:
+          requests:
+            # Guest RAM, reserved for the VM's whole lifetime (ADR-032 §5).
+            memory: 4Gi
+            cpu: "4"
+          limits:
+            memory: 4Gi
+            cpu: "4"
+        devices:
+          # virtio-rng. The cluster runs KubeVirt with useEmulation:true (QEMU TCG,
+          # no hardware virt), where guest entropy accrues slowly. sshd generates its
+          # host keys on first boot; starved of entropy that can stall for minutes,
+          # which presents as "SSH is broken" rather than "SSH is not up yet". The
+          # live reference VM carries this device.
+          rng: {}
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            # masquerade = pod-network NAT behind the launcher pod IP. Works with the
+            # cluster's Cilium CNI + the tenant default-deny NetworkPolicies with no
+            # Multus/bridge complexity (ADR-032 §1/§2b).
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: team-404-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            # First-boot setup = the "no Dockerfile" install step. The secret (key
+            # `userdata`) is generated by kustomize from cloud-init.yaml in this dir
+            # (disableNameSuffixHash -> stable name). cloud-init runs ONCE on first
+            # boot; to re-run it, recreate the VM.
+            secretRef:
+              name: team-404-cloudinit
+            # ── networkData — DO NOT DELETE. THE VM LOSES ALL NETWORKING WITHOUT IT ──
+            #
+            # THIS IS THE FIX FOR THE BUG THIS VM ACTUALLY HAD. On 2026-08-31 this
+            # guest was fully booted, sshd was listening, the VMI said Running and
+            # Ready, the ssh Service had a live Endpoint — and the launcher's tap
+            # device read `RX: 0 bytes 0 packets` after three days. The guest had
+            # never transmitted a frame, because it had no IP address.
+            #
+            # Three facts, each harmless alone:
+            #   1. KubeVirt masquerade gives the GUEST the launcher POD's MAC, and the
+            #      CNI generates that MAC per pod — so the guest's MAC changes on every
+            #      VM restart. (This VM's PVC is 3h older than its VMI: the running
+            #      guest was a SECOND boot, with a MAC its disk had never seen.)
+            #   2. With no networkData the NoCloud seed has no network config, so
+            #      cloud-init falls back to a netplan pinned to
+            #      `match: {macaddress: <the MAC at first boot>}`.
+            #   3. cloud-init only re-applies network config when the INSTANCE-ID
+            #      changes, and a restart keeps the same instance-id — so the stale,
+            #      MAC-pinned rule is never rewritten and matches no device.
+            #
+            # Matching on interface NAME instead makes the config survive the MAC
+            # change. Proven by controlled experiment on this cluster: two identical
+            # VMs on persistent disks, restarted once each — the one without this
+            # block came back with `enp1s0 False` and RX 0, the one with it came back
+            # on 10.0.2.2 and answered `SSH-2.0-OpenSSH_9.6p1`.
+            #
+            # Keep in sync with the blueprint this was scaffolded from:
+            # platform-infra platform-services/backstage/templates/vm-app/skeleton-vm/
+            #   .devops/chart/base/virtualmachine.yaml
+            networkData: |
+              version: 2
+              ethernets:
+                primary:
+                  match:
+                    name: "e*"
+                  dhcp4: true
+                  dhcp6: false

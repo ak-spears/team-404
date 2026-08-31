@@ -1,0 +1,28 @@
+# vm-metadata.yaml — the student-tunable knobs for your VM (the VM analogue of
+# app-metadata.yaml). These mirror the values rendered into
+# .devops/chart/base/virtualmachine.yaml at scaffold time. The chart base is the LIVE
+# source ArgoCD deploys; to change a value after scaffolding, edit it BOTH here (the
+# record) and in virtualmachine.yaml (the live manifest), or just edit virtualmachine.yaml.
+#
+# The DEEP customization — what your VM actually runs — lives in
+# .devops/chart/base/cloud-init.yaml (install your stack on first boot).
+team: team-404
+semester: 2026-fall
+app-name: team-404
+
+# Base disk image CDI imports (containerDisk registry ref, or switch the DataVolume
+# source to http in virtualmachine.yaml). Point this at your OWN image.
+# dump-quoted (D-108 sweep, deck-reviewer finding): baseImage is unconstrained free
+# text documented as a docker://host/repo:tag ref -- a colon+space, an http(s) URL
+# with a space after the scheme colon, or a trailing "# note" comment each break the
+# unquoted flow scalar (the live default dodges it by coincidence: neither colon in
+# docker://quay.io/containerdisks/fedora:40 is followed by a space).
+base-image: "docker://quay.io/containerdisks/ubuntu:24.04-2608270208"
+
+# Sizing — reserved for the VM's whole lifetime (no overcommit; the VM-tier quota caps it).
+cpu-cores: 4
+memory-gi: 4
+disk-gi: 30
+
+# The port your app listens on INSIDE the VM (Service/Ingress forward to it).
+port: 80

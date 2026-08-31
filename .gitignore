@@ -1,11 +1,23 @@
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Local VM/cloud-init scratch
+*.qcow2
+*.img
+__pycache__/
+
+# Node / pnpm app build output
 node_modules/
 dist/
-.env
-.env.local
-*.log
-.DS_Store
 coverage/
 .turbo/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+*.log
+
+# Local secrets (see .env.example)
+.env
+.env.local

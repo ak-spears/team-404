@@ -1,14 +1,18 @@
-# ci.yml -- install -> typecheck -> lint -> build.
+# ci.yml -- the APP's CI: install -> typecheck -> lint -> build.
+#
+# Scope: this workflow only proves the TypeScript workspace is healthy. It builds no
+# container image and pushes nothing -- packaging this app is the coursework, not the
+# starting point. The VM manifests are validated separately by build-and-push.yaml.
 #
 # No test job exists yet. "Green" means install+typecheck+lint+build only.
 #
-# RUNNER LABEL: `ua-mis-kaniko` is the platform's ORG-WIDE shared ARC scale set --
-# crimson-copies is not a capstone tenant, so it shares the same org-wide pool every
-# non-tenant build uses.
+# RUNNER: same per-team seam as build-and-push.yaml -- the repo Actions variable
+# RUNNER_SCALE_SET picks this team's ARC scale set; unset -> the shared `ua-mis-kaniko`
+# pool. (That name is just the scale set's name; nothing here runs Kaniko.)
 #
 # CONTAINER-MODE REQUIREMENT: the ARC scale set is containerMode:kubernetes -- every
 # job MUST declare a `container:` or the runner hard-fails at "Set up job".
-# node:22-alpine matches this repo's own Node version.
+# node:22-alpine matches this repo's own Node version (package.json engines: >=22).
 name: ci
 
 on:
@@ -25,7 +29,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ua-mis-kaniko
+    runs-on: ${{ vars.RUNNER_SCALE_SET || 'ua-mis-kaniko' }}
     container:
       image: node:22-alpine
     steps:

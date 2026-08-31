@@ -1,0 +1,31 @@
+# catalog-info.yaml — registers this VM app in The Process software catalog.
+# catalog:register (the scaffolder's register step) points here.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: team-404
+  # Same D-106 fix as _fragments/_contract/catalog-info.yaml: `dump`-encode the one
+  # free-text field so catalog:register can't die on YAML-special content (colon,
+  # leading #/@/quote, all-digits, ...). This skeleton renders standalone (not via
+  # _fragments/_contract), so it needed its own copy of the fix — deck-reviewer
+  # review of PR #490 caught that vm-app is one of only two live-catalog-registered
+  # templates and carried the identical bug, unreached by the _contract fix.
+  description: "A UA-MIS capstone VM project."
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: UA-MIS/team-404
+    capstone.uamishub.com/cohort: Capstone Fall 2026
+  tags:
+    - capstone
+    - vm
+    - 2026-fall
+  links:
+    # The VM is single-environment, so the catalog link is the clean canonical host.
+    - title: App
+      url: https://team-404.capstone.uamishub.com
+spec:
+  # 'service' with the vm tag — a VM workload exposed as a service. The infra/lifecycle
+  # are the same catalog model as a container app; only the runtime kind differs.
+  type: service
+  lifecycle: experimental
+  owner: group:default/team-404
