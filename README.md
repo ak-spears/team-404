@@ -18,6 +18,10 @@ those is the coursework.
 - `packages/shared` — zod schemas, enums, and pricing/status-transition logic shared by the
   services above.
 
+How these fit together — how an order moves through the system, who calls whom, where
+authentication actually happens, and what touches the database and object storage — is in
+**[`docs/architecture.md`](docs/architecture.md)**, with diagrams.
+
 ## Local setup
 
 ```bash
@@ -49,6 +53,52 @@ pnpm -r run build
 
 There is no test step — see `.github/workflows/ci.yml`, which runs exactly these three.
 
+## Getting onto the VM
+
+Open **<https://team-404-console.uamishub.com>** and sign in with GitHub. You land in a
+shell on the VM as `ubuntu`.
+
+That is the whole instruction. No SSH key, no client to install, nothing to configure.
+
+`ubuntu` is the machine's own account and it is shared by your team — your GitHub login is
+what gets you *to* the host, not who you are once you are on it. The shell can `sudo`, so
+this is all you need for the deploy steps below.
+
+<details>
+<summary><b>Optional: SSH, if you want a real terminal</b></summary>
+
+The browser console is enough for everything in this course. SSH is the advanced path — worth
+it if you want scrollback, `tmux`, an editor, or `scp`.
+
+The VM imports its logins **from GitHub**. It reads the public keys on the GitHub accounts
+listed in `.devops/chart/base/cloud-init.yaml` and re-reads them every 5 minutes, so nobody
+hands out keys and nobody has to add you by hand. Two things have to be true:
+
+1. Your GitHub account has an SSH key — check <https://github.com/settings/keys>, and confirm
+   with `curl https://github.com/YOUR-USERNAME.keys`, which must print a key rather than
+   nothing. (`ssh-keygen -t ed25519` if you have never made one.)
+2. Your GitHub username is on the roster in `.devops/chart/base/cloud-init.yaml`. That file
+   is the list of who may log in; add yourself and open a PR.
+
+The VM is not on the public internet, so you also need `cloudflared`
+(`brew install cloudflared`, or the `.deb`/`.msi` from the
+[releases page](https://github.com/cloudflare/cloudflared/releases)). Then, once:
+
+```bash
+cloudflared access ssh-config --hostname team-404-ssh.uamishub.com >> ~/.ssh/config
+```
+
+and from then on:
+
+```bash
+ssh ubuntu@team-404-ssh.uamishub.com
+```
+
+`Permission denied (publickey)` is the expected message when your key is not on the VM *yet*:
+confirm GitHub actually has it, wait out the 5-minute refresh, then check the roster.
+
+</details>
+
 ## Running on the VM
 
 Your team has one VM (there is never a staging or production VM). It is already set up:
@@ -71,21 +121,41 @@ Already on the box when you first log in:
 ```bash
 gh auth login                                        # device flow, in your browser
 git clone https://github.com/UA-MIS/team-404 ~/team-404
-sudo capstone-app-deploy                             # env, install, migrate, seed, build, start
+sudo capstone-app-deploy ~/team-404   # env, install, migrate, seed, build, start
 ```
 
 That is the whole first-time bring-up. `capstone-app-deploy` does the steps in
 `docs/manual-deploy.md` for you, on the box, and prints a health check per service at the
-end. Re-run it after any change — it is idempotent.
+end. It is idempotent — re-run it as often as you like.
+
+> **Pass the path explicitly, every time.** Bare `sudo capstone-app-deploy` falls back to
+> a directory name hardcoded in the script, which is not this team's. It fails, and the
+> error it prints suggests a *different team's* path — ignore that suggestion.
+> `sudo capstone-app-deploy ~/team-404` is the form that works.
 
 > **The first deploy takes roughly 30–45 minutes**, almost all of it `next build`. The
 > cluster runs these VMs without hardware virtualisation, so the CPU is emulated and
 > builds are far slower than on your laptop. Run it under `tmux` (or `nohup`) so a
 > dropped console does not kill it. Later deploys are faster — only what changed rebuilds.
 
-Then open **https://team-404.capstone.uamishub.com/** — that is the storefront.
-Sign in with the seeded demo accounts (`staff` / `staffpass123`, `customer` /
-`customerpass123`; see `apps/orders-api/README.md`).
+Then open **https://team-404.capstone.uamishub.com/** — that is the storefront. Sign in as
+`customer` / `customerpass123` (seeded; see `apps/orders-api/README.md`).
+
+The seeded `staff` account also exists, but it currently has nowhere to be used: the staff
+console is not published on any public route, so there is no URL that reaches it.
+`docs/architecture.md` shows exactly where that stops.
+
+### Redeploying after you change something
+
+`capstone-app-deploy` builds **whatever is sitting in the clone**. It does not fetch. Pull
+first — otherwise you get a clean, green, successful build of the code you already had,
+which is the most expensive way to waste 40 minutes here:
+
+```bash
+cd ~/team-404
+git pull
+sudo capstone-app-deploy ~/team-404
+```
 
 ### Doing it by hand instead
 
@@ -98,7 +168,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @crimson-copies/orders-api run db:migrate
 pnpm --filter @crimson-copies/orders-api run db:seed
 pnpm build
-sudo capstone-app-deploy          # staging + systemd is the fiddly part; let it do that
+sudo capstone-app-deploy ~/team-404   # staging + systemd is the fiddly part
 ```
 
 `db:migrate` and `db:seed` must run **from this clone**, not from `/opt/crimsoncopies/` —
@@ -124,71 +194,6 @@ dependencies only.
 > cloud-init installs at `/etc/caddy/Caddyfile`, which sends `:80` to the storefront.
 > Reconciling the repo's Caddyfile with the VM's real topology is your exercise — nobody
 > has done it for you.
-
-## Reaching the VM over SSH
-
-Your VM is a real machine you log into and work on. Nobody hands out keys and nobody
-has to add you — you add yourself, and the VM picks you up within about five minutes.
-
-### Step 1 — put an SSH key on your GitHub account (almost everyone has to do this)
-
-**Do not skip this.** Most students have never uploaded an SSH key, and the VM imports
-its logins *from GitHub*. If your GitHub account has no key, everything below will look
-like it worked and you still will not be able to log in — there is no error message
-that tells you why. Check <https://github.com/settings/keys> first.
-
-```bash
-ssh-keygen -t ed25519                 # press Enter at every prompt; skip if you already have one
-cat ~/.ssh/id_ed25519.pub             # copy this whole line
-```
-
-Paste that line into <https://github.com/settings/keys> → **New SSH key**.
-
-You can confirm GitHub has it — this must print your key, not nothing:
-
-```bash
-curl https://github.com/YOUR-GITHUB-USERNAME.keys
-```
-
-### Step 2 — install `cloudflared`
-
-The VM is not on the public internet. `cloudflared` is the tunnel client that gets you
-to it.
-
-```bash
-brew install cloudflared                                   # macOS
-# Windows: download the .msi from https://github.com/cloudflare/cloudflared/releases
-# Linux:   sudo apt install cloudflared   (or the .deb from the same releases page)
-```
-
-### Step 3 — teach SSH about the host (once)
-
-```bash
-cloudflared access ssh-config --hostname team-404-ssh.uamishub.com >> ~/.ssh/config
-```
-
-### Step 4 — log in
-
-```bash
-ssh ubuntu@team-404-ssh.uamishub.com
-```
-
-A browser window opens the first time so you can sign in with your university account.
-You log in as the user `ubuntu` — that is the machine's account, shared by the team;
-your own identity is what gets you *to* the host.
-
-### If it says `Permission denied (publickey)`
-
-That is the expected message when your key is not on the VM **yet**. In order:
-
-1. Did step 1 actually land? `curl https://github.com/YOUR-USERNAME.keys` must print a key.
-2. Did you only just add it? The VM re-reads GitHub **every 5 minutes**. Wait, retry.
-3. Still stuck after ~10 minutes? Your GitHub username may not be on the team roster in
-   `.devops/chart/base/cloud-init.yaml`. Add it, open a PR — that file is the list of
-   who may log in.
-
-The refresh is a timer inside the VM, so this works even though nobody is logged in and
-even though the VM was built before you uploaded anything.
 
 ## What not to touch
 
