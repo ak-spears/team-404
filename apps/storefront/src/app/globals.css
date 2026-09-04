@@ -119,3 +119,21 @@ button:disabled {
   padding: 1rem;
   background: #fafafa;
 }
+
+.google-signin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: white;
+  color: #3c4043;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.google-signin-btn:hover {
+  background-color: #f7f8f8;
+}
