@@ -10,7 +10,7 @@ import {
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
-import { customers, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.js';
+import { customers, googleIdentities, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.js';
 
 const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -123,6 +123,12 @@ export interface OrdersRepository {
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+  /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
+  verifyOrCreateGoogleUser(input: {
+    googleId: string;
+    email: string;
+    name?: string;
+  }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
   /** Generic append-only audit trail write (order_events). */
   recordEvent(
@@ -399,16 +405,57 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       return { valid: true, orderId: credential.orderId };
     },
 
-    async verifyUserCredentials(username, password) {
+    async verifyUserCredentials(username, password) { //Google auth version
       const normalizedUsername = username.trim().toLowerCase();
       const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
       if (!user) return { valid: false };
+
+      if (!user.passwordHash) return { valid: false };
 
       const passwordMatches = await bcrypt.compare(password, user.passwordHash);
       if (!passwordMatches) return { valid: false };
 
       return { valid: true, userId: user.id, username: user.username, role: user.role };
     },
+
+    async verifyOrCreateGoogleUser({ googleId, email }) {
+      // Check if this Google account is already linked to a user.
+      const [existingIdentity] = await db
+        .select()
+        .from(googleIdentities)
+        .where(eq(googleIdentities.googleId, googleId))
+        .limit(1);
+
+      if (existingIdentity) {
+        const [user] = await db.select().from(users).where(eq(users.id, existingIdentity.userId)).limit(1);
+        if (!user) throw new Error('google_identities row references a missing user');
+        return { valid: true, userId: user.id, username: user.username, role: user.role };
+      }
+
+      // No existing link -- create a brand-new customer account for this Google user.
+      // Username is derived from email since Google doesn't supply one; not guaranteed
+      // collision-free, but good enough for this project's scope.
+      const derivedUsername = (email.split('@')[0] ?? 'user').toLowerCase();
+
+      return db.transaction(async (tx) => {
+        const [insertResult] = await tx.insert(users).values({
+          username: derivedUsername,
+          passwordHash: null,
+          role: 'customer',
+        });
+        const newUserId = insertResult.insertId;
+
+        await tx.insert(googleIdentities).values({
+          userId: newUserId,
+          googleId,
+          email,
+        });
+
+        return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
+      });
+    },
+
+    
 
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {

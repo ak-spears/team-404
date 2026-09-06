@@ -3,6 +3,21 @@ import { redirect } from 'next/navigation';
 import { callOrdersApi } from '../../lib/internal-api';
 import { createSessionCookieValue, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from '../../lib/session';
 
+import { loadConfig } from '../../lib/config';
+
+function buildGoogleAuthUrl(): string {
+  const config = loadConfig();
+  const params = new URLSearchParams({
+    client_id: config.GOOGLE_CLIENT_ID,
+    redirect_uri: 'http://localhost:3000/auth/google/callback', //change this when pushed to the VM!
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'offline',
+    prompt: 'consent',
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
 // Reads searchParams for the error/next state below, so this page must never be statically
 // prerendered at build time (see orders/page.tsx for the same reasoning).
 export const dynamic = 'force-dynamic';
@@ -118,8 +133,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <input type="password" name="password" required autoComplete="current-password" />
         </label>
         <button type="submit">Sign in</button>
-        <button type="button" className="google-signin-btn">
-        <GoogleIcon />Sign in with Google</button>
+        <a href={buildGoogleAuthUrl()} className="google-signin-btn">
+        <GoogleIcon />Sign in with Google</a>
       </form>
       <p className="muted">
         No account? Guest checkout is still available -- <a href="/order">place an order</a>{' '}

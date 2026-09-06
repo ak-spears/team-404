@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   fileRegistrationInputSchema,
+  googleAuthCodeInputSchema,
   uploadCredentialsVerifyInputSchema,
   userCredentialsVerifyInputSchema,
 } from '@crimson-copies/shared';
@@ -8,6 +9,7 @@ import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
 import { createRequireInternalKey } from '../plugins/internal-auth.js';
 import type { OrdersRepository } from '../repositories/orders-repository.js';
+import { OAuth2Client } from 'google-auth-library';
 
 export interface InternalRoutesOptions {
   repository: OrdersRepository;
@@ -116,6 +118,41 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       return reply.code(401).send({ error: 'invalid_credentials' });
     }
     console.log('login verified', { userId: result.userId, role: result.role });
+    return reply.code(200).send({ userId: result.userId, username: result.username, role: result.role });
+  });
+
+
+    // Called by the storefront's Google OAuth callback after it has verified the ID token
+  // server-side. orders-api looks up or creates the linked user and returns identity info,
+  // same contract as verify-credentials -- the caller establishes the session afterward.
+  app.post('/internal/auth/verify-google', { preHandler: requireInternalKey }, async (request, reply) => {
+    const parsed = googleAuthCodeInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    // Exchange the authorization code for Google's ID token.
+    const oauthClient = new OAuth2Client(
+      options.config.GOOGLE_CLIENT_ID,
+      options.config.GOOGLE_CLIENT_SECRET,
+      parsed.data.redirectUri,
+    );
+    const { tokens } = await oauthClient.getToken(parsed.data.code);
+    const ticket = await oauthClient.verifyIdToken({
+      idToken: tokens.id_token!,
+      audience: options.config.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email || !payload.sub) {
+      return reply.code(401).send({ error: 'invalid_google_token' });
+    }
+
+    const result = await options.repository.verifyOrCreateGoogleUser({
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+    });
+    console.log('google login verified', { userId: result.userId, role: result.role });
     return reply.code(200).send({ userId: result.userId, username: result.username, role: result.role });
   });
 }
