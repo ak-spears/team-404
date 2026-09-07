@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { SESSION_COOKIE_NAME } from '../../lib/session';
 
 /** Signed out via a plain form POST -- no client JS required. */
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(_request: Request): Promise<NextResponse> {
   const store = await cookies();
   store.delete({
     name: SESSION_COOKIE_NAME,
@@ -12,5 +12,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     sameSite: 'lax',
     path: '/',
   });
-  return NextResponse.redirect(new URL('/', request.url), { status: 303 });
+  return NextResponse.redirect('/', { status: 303 });
 }
