@@ -27,6 +27,7 @@ const envSchema = z.object({
   INTERNAL_API_KEY: z.string().min(1, 'INTERNAL_API_KEY is required'),
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
 });
 
 export type Config = z.infer<typeof envSchema>;

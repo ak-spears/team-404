@@ -9,7 +9,7 @@ function buildGoogleAuthUrl(): string {
   const config = loadConfig();
   const params = new URLSearchParams({
     client_id: config.GOOGLE_CLIENT_ID,
-    redirect_uri: 'http://localhost:3000/auth/google/callback', //change this when pushed to the VM!
+    redirect_uri: `${config.APP_BASE_URL}/auth/google/callback`,
     response_type: 'code',
     scope: 'openid email profile',
     access_type: 'offline',

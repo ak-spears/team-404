@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { callOrdersApi } from '../../../../lib/internal-api';
 import { createSessionCookieValue, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from '../../../../lib/session';
+import { loadConfig } from '../../../../lib/config';
 
 interface GoogleAuthResponseBody {
   userId: number;
@@ -9,9 +10,10 @@ interface GoogleAuthResponseBody {
   role: 'customer' | 'staff';
 }
 
-const REDIRECT_URI = 'http://localhost:3000/auth/google/callback';
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const config = loadConfig();
+  const REDIRECT_URI = `${config.APP_BASE_URL}/auth/google/callback`;
+
   const code = request.nextUrl.searchParams.get('code');
 
   if (!code) {
