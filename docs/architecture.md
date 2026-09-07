@@ -37,9 +37,9 @@ flowchart LR
     end
 
     browser --> ingress --> caddy
-    caddy -->|"all paths"| sf
+    caddy -->|"/staff, /staff/*"| sc
+    caddy -->|"everything else"| sf
     caddy -.->|"failover when 3000 is down"| starter
-    caddy -.->|"host staff.team-404...<br/>NO DNS cert - unreachable"| sc
 
     sf -->|"X-Internal-Key"| api
     sc -->|"X-Internal-Key"| api
@@ -47,18 +47,25 @@ flowchart LR
     api -->|"X-Internal-Key"| notify
     sc -->|"presigned GET"| minio
 
-    style sc stroke-dasharray: 5 5
     style notify stroke-dasharray: 5 5
 ```
 
-**staff-console has no public route.** Caddy's `@staff` matcher is a *host* matcher
-(`staff.team-404.capstone.uamishub.com`), not a path — so `/staff` on the main
-hostname falls through to the storefront and returns the storefront's 404. Verified
-against the live VM: `/staff` → **404**, and `/staff/` → **308** to `/staff` → **404**.
-There is no path that reaches it. The `staff.` hostname itself resolves through
-Cloudflare's wildcard but fails the TLS handshake, because the certificate covers only
-one label. **The seeded `staff` account currently has nowhere to be used.** Wiring that
-up is work waiting to be done, not a bug to route around.
+**staff-console is served under the `/staff` path prefix** on the team's single public
+hostname (`https://team-404.capstone.uamishub.com/staff`). It is *not* a `staff.`
+subdomain: the free-plan wildcard certificate covers only one label, so
+`staff.team-404.capstone.uamishub.com` can never get a certificate (platform decision
+D-044/ADR-028). Caddy matches `path /staff /staff/*` and forwards to `127.0.0.1:3001`
+unchanged; the app sets `basePath: '/staff'` (`apps/staff-console/next.config.ts`) so
+every route, asset and redirect it emits already carries the prefix and nothing
+collides with the storefront at `/`. The seeded `staff` account signs in at
+`/staff/login`.
+
+> **Deploy note.** The route lives in `deploy/vm/Caddyfile`. `capstone-app-deploy`
+> rebuilds the app but does **not** install the Caddyfile — a freshly provisioned VM
+> still loads the cloud-init copy (`.devops/chart/base/cloud-init.yaml` →
+> `/etc/caddy/Caddyfile`), which matches staff-console on the dead `staff.` host. Until
+> cloud-init is updated, `deploy/vm/Caddyfile` must be installed by hand — see
+> `docs/manual-deploy.md` ("Reverse proxy").
 
 **notify sends no email.** Its handler logs `[stub] would send …` and returns 202. There
 is no SMTP configuration anywhere and no mail dependency. It is drawn dashed for that
@@ -260,7 +267,7 @@ Each diagram, and the file and function each claim was read from.
 | Diagram | Derived from |
 |---|---|
 | 1. Topology | `apps/storefront/src/lib/internal-api.ts` → `callOrdersApi()`; `apps/staff-console/src/lib/internal-api.ts` → `callOrdersApi()`; `apps/orders-api/src/lib/notify-client.ts` → `sendNotification()`; `apps/staff-console/src/lib/minio.ts` → `presignFileUrl()`; bind addresses from `apps/orders-api/src/config.ts`, `services/notify/src/config.ts`, and `PORT`/`HOSTNAME` in `deploy/vm/systemd/cc-*.service` |
-| 1. Public reachability | The Caddyfile installed by cloud-init at `/etc/caddy/Caddyfile`, **not** `deploy/vm/Caddyfile`. Confirmed by request against the live VM: `/` → 200, `/staff` → 404 |
+| 1. Public reachability | `deploy/vm/Caddyfile` — `@staff path /staff /staff/*` → `reverse_proxy 127.0.0.1:3001`, everything else → storefront. Paired with `basePath: '/staff'` in `apps/staff-console/next.config.ts`. NOTE: a freshly provisioned VM still loads the cloud-init Caddyfile (`/etc/caddy/Caddyfile`), which predates this and matches staff-console on the unreachable `staff.` host — `deploy/vm/Caddyfile` must be installed by hand until cloud-init catches up |
 | 2. Order lifecycle | `packages/shared/src/status-transitions.ts` → `ORDER_STATUS_TRANSITIONS`; enforced in `apps/orders-api/src/repositories/orders-repository.ts` → `updateOrderStatus()`; staff-only gate in `apps/orders-api/src/routes/orders.ts` → `PATCH /api/orders/:id/status` |
 | 3. Placing an order | `apps/storefront/src/components/OrderForm.tsx` → `handleSubmit()`; `apps/storefront/src/app/api/orders/route.ts` → `POST()`; `apps/orders-api/src/routes/orders.ts` → `POST /api/orders`; `apps/orders-api/src/repositories/orders-repository.ts` → `createOrder()`; `apps/orders-api/src/lib/notify-and-record.ts` → `doNotifyThing()` |
 | 3. `email_sent` on a stub | `services/notify/src/routes/send.ts` → `POST /internal/send` returns 202 without sending; `notify-and-record.ts` → `doNotifyThing()` writes `email_sent` on any success |

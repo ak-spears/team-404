@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { ORDER_STATUS_TRANSITIONS, type OrderStatus } from '@crimson-copies/shared';
+import { BASE_PATH } from '../lib/base-path';
 
 /** Advance an order's status. Posts to this app's own PATCH BFF route (staff-only). */
 export function StatusUpdateForm({
@@ -28,7 +29,9 @@ export function StatusUpdateForm({
     setError(null);
 
     try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
+      // Client fetch() is not basePath-aware -- prefix so this hits /staff/api/... and not
+      // the storefront at the root.
+      const response = await fetch(`${BASE_PATH}/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),

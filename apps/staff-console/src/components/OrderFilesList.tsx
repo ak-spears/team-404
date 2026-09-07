@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BASE_PATH } from '../lib/base-path';
 
 interface OrderFileLink {
   originalFilename: string;
@@ -23,7 +24,9 @@ export function OrderFilesList({ orderId }: { orderId: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/orders/${orderId}/files`)
+    // Client fetch() is not basePath-aware -- prefix so this hits /staff/api/... (see
+    // src/lib/base-path.ts).
+    fetch(`${BASE_PATH}/api/orders/${orderId}/files`)
       .then(async (response) => {
         const body: unknown = await response.json();
         if (cancelled) return;

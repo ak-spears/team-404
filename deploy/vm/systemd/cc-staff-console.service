@@ -4,8 +4,9 @@
 # file's header for the full rationale + the reviewer-caught regression this fixes)
 # -- WorkingDirectory holds the ENTIRE `.next/standalone/` tree (real node_modules
 # included), and ExecStart points at the nested `apps/staff-console/server.js`
-# inside it. PORT=3001 keeps it off storefront's 3000 on the same VM; matches the
-# Caddyfile's staff.__TEAM__...  { reverse_proxy localhost:3001 }.
+# inside it. PORT=3001 keeps it off storefront's 3000 on the same VM; Caddy sends
+# the `/staff` path prefix here (deploy/vm/Caddyfile `@staff path /staff /staff/*`
+# -> reverse_proxy 127.0.0.1:3001), and the app sets `basePath: '/staff'` to match.
 [Unit]
 Description=Crimson Copies - staff-console (Next.js standalone)
 After=network.target

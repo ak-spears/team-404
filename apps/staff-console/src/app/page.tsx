@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ORDER_STATUSES, type Order, type OrderStatus } from '@crimson-copies/shared';
 import { callOrdersApi } from '../lib/internal-api';
@@ -34,7 +35,7 @@ export default async function QueuePage({ searchParams }: PageProps) {
     orderRows.push(
       <tr key={order.id}>
         <td>
-          <a href={`/orders/${order.id}`}>#{order.id}</a>
+          <Link href={`/orders/${order.id}`}>#{order.id}</Link>
         </td>
         <td>{order.serviceType}</td>
         <td>{order.quantity}</td>

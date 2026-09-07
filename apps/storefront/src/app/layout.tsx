@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { loadConfig } from '../lib/config';
 import { getSession } from '../lib/session';
 
 export const metadata: Metadata = {
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
+  const { STAFF_CONSOLE_URL } = loadConfig();
 
   return (
     <html lang="en">
@@ -26,9 +28,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <form action="/logout" method="POST" className="session-form">
               <span className="muted">Signed in as {session.username}</span>
               <button type="submit">Log out</button>
+              <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
             </form>
           ) : (
-            <a href="/login">Sign in</a>
+            <span className="session-form">
+              <a href="/login">Sign in</a>
+              <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
+            </span>
           )}
         </header>
         <main>{children}</main>

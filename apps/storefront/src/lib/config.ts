@@ -7,6 +7,10 @@ const envSchema = z.object({
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // staff-console, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
+  // Where the storefront's "Staff sign in" footer link points. On the VM the staff console
+  // is a path on the same hostname, so the default relative "/staff" is what Caddy routes.
+  // Local dev has no reverse proxy, so set this to http://localhost:3001/staff there.
+  STAFF_CONSOLE_URL: z.string().default('/staff'),
 });
 
 export type Config = z.infer<typeof envSchema>;
