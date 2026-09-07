@@ -24,7 +24,7 @@ export const users = mysqlTable('users', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),
   username: varchar('username', { length: 64 }).notNull().unique(),
   // bcrypt hash; the plaintext is never stored.
-  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  passwordHash: varchar('password_hash', { length: 255 }),
   role: mysqlEnum('role', ['customer', 'staff']).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -99,6 +99,27 @@ export const orderEvents = mysqlTable('order_events', {
   payloadJson: json('payload_json'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+
+
+export const googleIdentities = mysqlTable('google_identities', {
+  id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),
+  userId: bigint('user_id', { mode: 'number' })
+    .notNull()
+    .unique()
+    .references(() => users.id),
+  googleId: varchar('google_id', { length: 255 }).notNull().unique(),
+  email: varchar('email', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const googleIdentitiesRelations = relations(googleIdentities, ({ one }) => ({
+  user: one(users, { fields: [googleIdentities.userId], references: [users.id] }),
+}));
+
+
+
+
 
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
