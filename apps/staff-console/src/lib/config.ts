@@ -7,6 +7,10 @@ const envSchema = z.object({
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // storefront, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
+  // The main Crimson Copies site. Used for the "Home" header link and as the post-logout
+  // destination. On the VM the storefront is "/" on this same hostname (Caddy routes it), so
+  // the default is correct there. Local dev has no proxy -- set http://localhost:3000/ .
+  STOREFRONT_URL: z.string().default('/'),
   MINIO_ENDPOINT: z.string().default('localhost'),
   MINIO_PORT: z.coerce.number().int().default(9000),
   MINIO_USE_SSL: z

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { BASE_PATH } from "./lib/base-path";
 
 // Duplicated from lib/session.ts's SESSION_COOKIE_NAME rather than imported -- middleware runs
 // on the Edge runtime, and lib/session.ts pulls in node:crypto (for the real signature check),
@@ -14,8 +15,14 @@ const SESSION_COOKIE_NAME = "cc_session";
  */
 export function middleware(request: NextRequest): NextResponse {
   if (!request.cookies.has(SESSION_COOKIE_NAME)) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    // Spell the /staff basePath out: NextResponse.redirect() does NOT re-add it the way
+    // next/navigation's redirect() does, so a bare `new URL("/login", request.url)` would
+    // land on the storefront's /login. Resolve against request.url so scheme/host come from
+    // the request (behind the VM's Caddy, that's the public hostname).
+    // request.nextUrl.pathname is already basePath-relative (e.g. "/orders/3"), which is what
+    // the login page's `next` handling expects.
+    const next = encodeURIComponent(request.nextUrl.pathname || "/");
+    const loginUrl = new URL(`${BASE_PATH}/login?next=${next}`, request.url);
     return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();

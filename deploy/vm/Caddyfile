@@ -1,22 +1,54 @@
-# Crimson Copies -- VM reverse proxy
+# Crimson Copies -- VM reverse proxy. Caddy on :80 is the ONLY public door.
 #
-# This VM has exactly ONE environment (dev; there is never a staging/prod VM), so
-# this is the whole Caddyfile, not a template rendered per-env. Replace __TEAM__
-# with the team's slug (e.g. team1, team2, ...) before deploying.
+# This VM has exactly ONE public hostname (https://<team>.capstone.uamishub.com) and exactly
+# one environment (dev; there is never a staging/prod VM). TLS is terminated upstream
+# (Cloudflare -> Traefik), so this is a plain `:80` site with Caddy's automatic HTTPS turned
+# OFF -- the guest can't complete an ACME challenge and a hostname site address would make
+# Caddy retry forever.
 #
-# orders-api and notify are NOT reverse-proxied here -- both are internal-only,
-# never a public hostname (see docs/manual-deploy.md).
+# ROUTING
+#   /staff, /staff/*   -> staff-console  (127.0.0.1:3001)
+#   everything else     -> storefront     (127.0.0.1:3000), failing over to the :8080 starter
+#                                          page until the team's first deploy
+#
+# staff-console is served under the /staff PATH PREFIX, not a `staff.` subdomain: the free-plan
+# wildcard certificate covers only one label, so `staff.<team>.capstone.uamishub.com` can never
+# get a certificate (docs/architecture.md sec. 1). The staff-console app sets `basePath: '/staff'`
+# (apps/staff-console/next.config.ts) to match, so every route, asset and redirect it emits
+# already carries the /staff prefix -- this file forwards the request path AS-IS and strips
+# nothing.
+#
+# orders-api (4000) and notify (4100) are internal-only and are never proxied here.
+#
+# NOT THE FILE THE RUNNING VM LOADS YET. A freshly provisioned VM installs its Caddyfile from
+# cloud-init (.devops/chart/base/cloud-init.yaml -> /etc/caddy/Caddyfile), which still matches
+# staff-console on a `staff.` HOST that has no DNS and no certificate. Until cloud-init is
+# updated, apply this file to the live VM by hand -- see docs/manual-deploy.md ("Reverse
+# proxy").
 
-storefront.__TEAM__.crimsoncopies.dev.uamishub.com {
-	reverse_proxy localhost:3000
+{
+	auto_https off
 }
 
-staff.__TEAM__.crimsoncopies.dev.uamishub.com {
-	reverse_proxy localhost:3001
-}
+:80 {
+	# Staff console -- path prefix, forwarded unchanged (the app owns /staff via basePath).
+	@staff path /staff /staff/*
+	handle @staff {
+		reverse_proxy 127.0.0.1:3001
+	}
 
-# Mailpit web UI -- dev-only convenience to see the email the app sent, not part
-# of the app's own surface.
-mail.__TEAM__.crimsoncopies.dev.uamishub.com {
-	reverse_proxy localhost:8025
+	# Everything else -> the customer storefront.
+	#
+	# Two upstreams, and the second is the point: nothing listens on 3000 until the team's
+	# first deploy, so a single-upstream proxy would answer a freshly built VM with a bare
+	# 502. `lb_policy first` always prefers 3000 and only falls back to the :8080 starter
+	# page when 3000 is down; `lb_try_duration` makes that failover happen within the first
+	# request rather than after a failure is recorded.
+	handle {
+		reverse_proxy 127.0.0.1:3000 127.0.0.1:8080 {
+			lb_policy first
+			lb_try_duration 5s
+			fail_duration 10s
+		}
+	}
 }

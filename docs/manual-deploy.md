@@ -41,13 +41,41 @@ ever describes one environment.
   `SESSION_SECRET`, per environment; never commit a real `.env`).
 - The 4 systemd units (`deploy/vm/systemd/cc-*.service`) copied to
   `/etc/systemd/system/` and `systemctl daemon-reload`+`enable`d once.
-- `deploy/vm/Caddyfile` (with `__TEAM__` replaced) installed as the VM's Caddy config
-  and Caddy reloaded (`caddy reload --config /etc/caddy/Caddyfile` or via the distro
-  service).
+- `deploy/vm/Caddyfile` installed as the VM's Caddy config and Caddy reloaded -- see
+  [Reverse proxy](#reverse-proxy) below.
 - `pnpm --filter @crimson-copies/orders-api run db:migrate` and
   `pnpm --filter @crimson-copies/orders-api run db:seed` applied against the VM's
   MySQL at least once (see `apps/orders-api/README` for demo credentials the seed
   creates).
+
+## Reverse proxy
+
+`deploy/vm/Caddyfile` is the whole proxy config for this VM's single hostname. It has
+no placeholders -- install it verbatim:
+
+```bash
+sudo install -m 0644 deploy/vm/Caddyfile /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+Routing:
+
+| Request path        | Upstream                        |
+|---------------------|---------------------------------|
+| `/staff`, `/staff/*`| staff-console `127.0.0.1:3001`   |
+| everything else     | storefront `127.0.0.1:3000`, failing over to the `:8080` starter page until the first deploy |
+
+staff-console runs under the `/staff` **path prefix**, not a `staff.` subdomain -- the
+wildcard cert covers only one label so `staff.<team>.capstone.uamishub.com` can't get a
+certificate. `apps/staff-console/next.config.ts` sets `basePath: '/staff'` to match, so
+the app owns everything under `/staff` (including `/staff/_next/...` assets and
+`/staff/api/...` routes) and Caddy forwards the path unchanged.
+
+> `capstone-app-deploy` does **not** touch Caddy, and a freshly provisioned VM loads its
+> Caddyfile from cloud-init (`.devops/chart/base/cloud-init.yaml`), which still matches
+> staff-console on the unreachable `staff.` host. Run the `install` + `reload` above once
+> by hand after pulling this change; re-run it whenever `deploy/vm/Caddyfile` changes.
 
 ## 1. Build
 
@@ -130,10 +158,16 @@ ssh deploy@<vm-host> "sudo systemctl restart cc-storefront"
 
 ```bash
 ssh deploy@<vm-host> "systemctl status cc-orders-api --no-pager"
-curl -s https://storefront.__TEAM__.crimsoncopies.dev.uamishub.com/ -o /dev/null -w '%{http_code}\n'
+curl -s https://<team>.capstone.uamishub.com/          -o /dev/null -w 'storefront    %{http_code}\n'   # -> 200
+curl -s https://<team>.capstone.uamishub.com/staff     -o /dev/null -w 'staff-console %{http_code}\n'   # -> 307 to /staff/login
+curl -s https://<team>.capstone.uamishub.com/staff/login -o /dev/null -w 'staff login  %{http_code}\n'  # -> 200
 ssh deploy@<vm-host> "curl -s http://127.0.0.1:4000/healthz"     # orders-api, internal-only
 ssh deploy@<vm-host> "curl -s http://127.0.0.1:4100/healthz"     # notify, internal-only
 ```
+
+`/staff` → `307` (the sign-in redirect) is the healthy result -- it proves Caddy is
+routing the prefix to `127.0.0.1:3001` and the app's `basePath` is in effect. A `404`
+there means the old Caddyfile is still loaded (see [Reverse proxy](#reverse-proxy)).
 
 File upload isn't wired up yet -- `services/file-intake` doesn't exist, so the
 storefront's order-confirmation page shows a "coming soon" placeholder instead of
