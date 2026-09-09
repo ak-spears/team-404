@@ -3,6 +3,8 @@ import './globals.css';
 import { loadConfig } from '../lib/config';
 import { getSession } from '../lib/session';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Crimson Copies',
   description: 'Order printing, posters, and copies -- no email required.',

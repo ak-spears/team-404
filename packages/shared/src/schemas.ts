@@ -17,6 +17,13 @@ export const uploadMethodSchema = z.enum(UPLOAD_METHODS);
 export const emailTemplateSchema = z.enum(EMAIL_TEMPLATES);
 export const userRoleSchema = z.enum(USER_ROLES);
 
+/** Body of `POST /internal/auth/verify-google` (storefront BFF -> orders-api). */
+export const googleAuthCodeInputSchema = z.object({
+  code: z.string().min(1),
+  redirectUri: z.string().min(1),
+});
+export type GoogleAuthCodeInput = z.infer<typeof googleAuthCodeInputSchema>;
+
 /** Body of `POST /api/orders`. */
 export const orderCreateInputSchema = z.object({
   customerName: z.string().trim().min(1).max(255),

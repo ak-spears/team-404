@@ -8,6 +8,13 @@
       "when": 1787289479693,
       "tag": "0000_breezy_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1788727588973,
+      "tag": "0001_soft_carnage",
+      "breakpoints": true
     }
   ]
 }

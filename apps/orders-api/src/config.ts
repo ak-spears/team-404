@@ -11,6 +11,8 @@ const envSchema = z.object({
   // other end yet, so these are display-only for now.
   FILE_INTAKE_HOST: z.string().default('localhost'),
   FILE_INTAKE_PORT: z.coerce.number().int().default(2222),
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
 });
 
 export type Config = z.infer<typeof envSchema>;
