@@ -10,14 +10,15 @@ interface GoogleAuthResponseBody {
   role: 'customer' | 'staff';
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+
+ export async function GET(request: NextRequest): Promise<NextResponse> {
   const config = loadConfig();
   const REDIRECT_URI = `${config.APP_BASE_URL}/auth/google/callback`;
 
   const code = request.nextUrl.searchParams.get('code');
 
   if (!code) {
-    return NextResponse.redirect(new URL('/login?error=1', request.url));
+    return NextResponse.redirect(new URL('/login?error=1', config.APP_BASE_URL));
   }
 
   const result = await callOrdersApi<GoogleAuthResponseBody>({
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   if (result.status !== 200) {
-    return NextResponse.redirect(new URL('/login?error=1', request.url));
+    return NextResponse.redirect(new URL('/login?error=1', config.APP_BASE_URL));
   }
 
   const store = await cookies();
@@ -47,5 +48,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
   );
 
-  return NextResponse.redirect(new URL('/', request.url));
+  return NextResponse.redirect(new URL('/', config.APP_BASE_URL));
 }
