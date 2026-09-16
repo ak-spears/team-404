@@ -45,7 +45,11 @@ export default async function OrderStatusPage({ params }: PageProps) {
         <dt>Service</dt>
         <dd>{order.serviceType}</dd>
         <dt>Status</dt>
-        <dd>{order.status}</dd>
+        <dd>
+          <span className="badge" data-status={order.status}>
+            {order.status}
+          </span>
+        </dd>
         <dt>Quantity</dt>
         <dd>{order.quantity}</dd>
         <dt>Submitted</dt>

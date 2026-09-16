@@ -32,7 +32,11 @@ export default async function MyOrdersPage() {
           <a href={`/orders/${order.id}`}>#{order.id}</a>
         </td>
         <td>{order.serviceType}</td>
-        <td>{order.status}</td>
+        <td>
+          <span className="badge" data-status={order.status}>
+            {order.status}
+          </span>
+        </td>
       </tr>,
     );
   }
@@ -43,16 +47,18 @@ export default async function MyOrdersPage() {
       {orders.length === 0 ? (
         <p>No orders yet. <a href="/order">Place one</a>.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Service</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>{orderRows}</tbody>
-        </table>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Service</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>{orderRows}</tbody>
+          </table>
+        </div>
       )}
     </>
   );
