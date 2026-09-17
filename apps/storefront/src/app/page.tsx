@@ -19,27 +19,38 @@ function formatPrice(cents: number | null): string {
 export default function CatalogPage() {
   return (
     <>
-      <h1>Service catalog</h1>
-      <p>
-        Submit an order online -- no more emailing files back and forth.{' '}
-        <a href="/order">Place an order</a>, no account required.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Service</th>
-            <th>Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SERVICE_TYPES.map((serviceType) => (
-            <tr key={serviceType}>
-              <td>{SERVICE_LABELS[serviceType]}</td>
-              <td>{formatPrice(PRICING_TABLE_CENTS[serviceType])}</td>
+      <section className="masthead">
+        <h1 className="masthead-title">Crimson Copies</h1>
+        <p className="masthead-tagline">Order printing, posters, and copies -- no email required.</p>
+      </section>
+      <section className="intro">
+        <h2>Service catalog</h2>
+        <p>
+          Submit an order online -- no more emailing files back and forth.{' '}
+          <a href="/order">Place an order</a>, no account required.
+        </p>
+        <a href="/order" className="btn-primary">
+          Place an order
+        </a>
+      </section>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Price</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {SERVICE_TYPES.map((serviceType) => (
+              <tr key={serviceType}>
+                <td>{SERVICE_LABELS[serviceType]}</td>
+                <td>{formatPrice(PRICING_TABLE_CENTS[serviceType])}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

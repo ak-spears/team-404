@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+// Hosted (Caddy fronts both apps on one origin): "/" reaches the storefront. Local dev runs
+// the apps on separate ports with no proxy, so a relative path can't cross over -- fall back
+// to the storefront's dev port. Override STOREFRONT_URL for any non-standard setup.
+const DEFAULT_STOREFRONT_URL =
+  process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:3000/';
+
 /** Server-only environment -- nothing here is ever exposed to a Client Component bundle. */
 const envSchema = z.object({
   ORDERS_API_URL: z.string().default('http://127.0.0.1:4000'),
@@ -7,10 +13,8 @@ const envSchema = z.object({
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // storefront, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
-  // The main Crimson Copies site. Used for the "Home" header link and as the post-logout
-  // destination. On the VM the storefront is "/" on this same hostname (Caddy routes it), so
-  // the default is correct there. Local dev has no proxy -- set http://localhost:3000/ .
-  STOREFRONT_URL: z.string().default('/'),
+  // The main Crimson Copies site: the "Home" header link and the post-logout destination.
+  STOREFRONT_URL: z.string().default(DEFAULT_STOREFRONT_URL),
   MINIO_ENDPOINT: z.string().default('localhost'),
   MINIO_PORT: z.coerce.number().int().default(9000),
   MINIO_USE_SSL: z

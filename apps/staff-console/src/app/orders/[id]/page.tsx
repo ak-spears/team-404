@@ -35,7 +35,11 @@ export default async function OrderDetailPage({ params }: PageProps) {
         <dt>Quantity</dt>
         <dd>{order.quantity}</dd>
         <dt>Status</dt>
-        <dd>{order.status}</dd>
+        <dd>
+          <span className="badge" data-status={order.status}>
+            {order.status}
+          </span>
+        </dd>
         <dt>Spec notes</dt>
         <dd>{order.specNotes ?? <span className="muted">none</span>}</dd>
         <dt>Submitted</dt>
