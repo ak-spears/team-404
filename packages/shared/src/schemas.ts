@@ -24,6 +24,36 @@ export const googleAuthCodeInputSchema = z.object({
 });
 export type GoogleAuthCodeInput = z.infer<typeof googleAuthCodeInputSchema>;
 
+/**
+ * Body of `POST /internal/auth/set-cwid` (storefront BFF -> orders-api).
+ * Numeric-only for now; a real CWID allowlist will replace this later.
+ */
+export const setCwidInputSchema = z.object({
+  userId: z.int().positive(),
+  cwid: z
+    .string()
+    .trim()
+    .regex(/^\d+$/, 'CWID must be a number'),
+});
+export type SetCwidInput = z.infer<typeof setCwidInputSchema>;
+
+/** True when the email is a UA address that skips the CWID gate. */
+export function isUaEmail(email: string): boolean {
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith('@crimson.ua.edu') || normalized.endsWith('@ua.edu');
+}
+
+/** True when a login username is allowed by the storefront's policy. */
+export function isAllowedLoginUsername(username: string): boolean {
+  const normalized = username.trim().toLowerCase();
+  if (!normalized) return false;
+
+  const allowedExceptions = ['customer', 'staff'];
+  const allowedSuffixes = ['@crimson.ua.edu', '@ua.edu'];
+
+  return allowedExceptions.includes(normalized) || allowedSuffixes.some((suffix) => normalized.endsWith(suffix));
+}
+
 /** Body of `POST /api/orders`. */
 export const orderCreateInputSchema = z.object({
   customerName: z.string().trim().min(1).max(255),

@@ -8,6 +8,10 @@ const envSchema = z.object({
   // staff-console, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  AUTH0_DOMAIN: z.string().min(1, 'AUTH0_DOMAIN is required').optional(),
+  AUTH0_CLIENT_ID: z.string().min(1, 'AUTH0_CLIENT_ID is required').optional(),
+  AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required').optional(),
+  AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required').optional(),
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
   // Where the storefront's "Staff sign in" link points. On the VM the staff console is a path
   // on this same hostname (Caddy routes it), so the default relative "/staff" is correct there.

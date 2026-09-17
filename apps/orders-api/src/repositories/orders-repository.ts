@@ -129,6 +129,8 @@ export interface OrdersRepository {
     email: string;
     name?: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
+  /** Stores a CWID on the user. Always overwrites (non-UA Google logins re-collect every time). */
+  setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
   /** Generic append-only audit trail write (order_events). */
   recordEvent(
@@ -455,7 +457,13 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       });
     },
 
-    
+    async setUserCwid(userId, cwid) {
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return null;
+
+      await db.update(users).set({ cwid }).where(eq(users.id, userId));
+      return { userId: user.id, username: user.username, role: user.role };
+    },
 
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {

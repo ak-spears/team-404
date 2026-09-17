@@ -1,3 +1,4 @@
+import { isAllowedLoginUsername } from '@crimson-copies/shared';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { callOrdersApi } from '../../lib/internal-api';
@@ -18,12 +19,23 @@ function buildGoogleAuthUrl(): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-// Reads searchParams for the error/next state below, so this page must never be statically
-// prerendered at build time (see orders/page.tsx for the same reasoning).
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<{ error?: string; next?: string }>;
+}
+
+function getLoginErrorMessage(error?: string): string | null {
+  if (error === 'ua-email-required') {
+    return 'A UA email address is required to sign in.';
+  }
+  if (error === 'invalid-email') {
+    return 'Only UA email addresses are allowed.';
+  }
+  if (error === 'invalid-credentials') {
+    return 'Invalid username or password.';
+  }
+  return null;
 }
 
 interface LoginResponseBody {
@@ -32,11 +44,6 @@ interface LoginResponseBody {
   role: 'customer' | 'staff';
 }
 
-// The post-login destination arrives from the query string, so it is attacker-controlled.
-// Only a same-site, path-only destination is ever allowed: resolve it against a throwaway
-// origin and require the origin to survive unchanged. That rejects 'https://evil.example.com',
-// the protocol-relative '//evil.example.com', the backslash form '/\\evil.example.com' and
-// tab/newline-smuggled variants, all of which browsers resolve off-site.
 const NEXT_FALLBACK = '/';
 
 function GoogleIcon() {
@@ -80,8 +87,8 @@ async function login(formData: FormData): Promise<void> {
     .toLowerCase();
   const password = String(formData.get('password') ?? '');
 
-  if (!username || !password) {
-    redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
+  if (!username || !password || !isAllowedLoginUsername(username)) {
+    redirect(`/login?error=invalid-email&next=${encodeURIComponent(next)}`);
   }
 
   const result = await callOrdersApi<LoginResponseBody>({
@@ -91,7 +98,7 @@ async function login(formData: FormData): Promise<void> {
   });
 
   if (result.status !== 200) {
-    redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
+    redirect(`/login?error=invalid-credentials&next=${encodeURIComponent(next)}`);
   }
 
   const store = await cookies();
@@ -114,14 +121,14 @@ async function login(formData: FormData): Promise<void> {
   redirect(next);
 }
 
-
 export default async function LoginPage({ searchParams }: PageProps) {
   const { error, next } = await searchParams;
+  const loginError = getLoginErrorMessage(error);
 
   return (
     <>
       <h1>Sign in</h1>
-      {error && <p className="error">Invalid username or password.</p>}
+      {loginError && <p className="error">{loginError}</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />
         <label>
@@ -134,11 +141,11 @@ export default async function LoginPage({ searchParams }: PageProps) {
         </label>
         <button type="submit">Sign in</button>
         <a href={buildGoogleAuthUrl()} className="google-signin-btn">
-        <GoogleIcon />Sign in with Google</a>
+          <GoogleIcon />Sign in with Google
+        </a>
       </form>
       <p className="muted">
-        No account? Guest checkout is still available -- <a href="/order">place an order</a>{' '}
-        without signing in.
+        Sign in with your UA/Crimson email to continue.
       </p>
     </>
   );

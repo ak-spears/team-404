@@ -1,71 +1,302 @@
 :root {
   --crimson: #9e1b32;
-  --ink: #1a1a1a;
+  --crimson-dark: #7a1526;
+  --crimson-tint: #f8ebec;
+  --crimson-tint-strong: #f0d6d9;
+  --ink: #1c1a1b;
+  --ink-soft: #55504f;
   --paper: #ffffff;
-  --muted: #666;
-  --border: #ddd;
+  --canvas: #faf9f8;
+  --muted: #767072;
+  --border: #e5e0e0;
+  --border-strong: #d3cdcd;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --shadow-sm: 0 1px 2px rgba(28, 26, 27, 0.05);
+  --shadow-md: 0 4px 16px -6px rgba(28, 26, 27, 0.12);
+  --error-text: #7a1b1b;
+  --error-bg: #fbeaea;
+  --error-border: #f0c9c9;
+  --hover-bg: rgba(28, 26, 27, 0.05);
+  color-scheme: light;
+}
+
+/* Dark mode: follows the OS by default (prefers-color-scheme), overridable per-visitor via
+   ThemeToggle, which sets data-theme and persists it to localStorage. The :not([data-theme=
+   "light"]) guard lets an explicit light choice win even when the OS is dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --crimson: #d8637a;
+    --crimson-dark: #e8899b;
+    --crimson-tint: #2a1c1f;
+    --crimson-tint-strong: #3a2428;
+    --ink: #eeeaea;
+    --ink-soft: #b3adad;
+    --paper: #201d1e;
+    --canvas: #171516;
+    --muted: #8c8586;
+    --border: #322d2e;
+    --border-strong: #423c3d;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px -6px rgba(0, 0, 0, 0.4);
+    --error-text: #f2a3a3;
+    --error-bg: #2c1a1a;
+    --error-border: #4a2626;
+    --hover-bg: rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --crimson: #d8637a;
+  --crimson-dark: #e8899b;
+  --crimson-tint: #2a1c1f;
+  --crimson-tint-strong: #3a2428;
+  --ink: #eeeaea;
+  --ink-soft: #b3adad;
+  --paper: #201d1e;
+  --canvas: #171516;
+  --muted: #8c8586;
+  --border: #322d2e;
+  --border-strong: #423c3d;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px -6px rgba(0, 0, 0, 0.4);
+  --error-text: #f2a3a3;
+  --error-bg: #2c1a1a;
+  --error-border: #4a2626;
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+    sans-serif;
   color: var(--ink);
-  background: var(--paper);
+  background: var(--canvas);
+  line-height: 1.55;
 }
+
+a {
+  color: var(--crimson);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--crimson-dark);
+}
+
+/* -------------------- Header -------------------- */
 
 .site-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.75rem 1.5rem;
   padding: 1rem 2rem;
+  background: var(--paper);
   border-bottom: 1px solid var(--border);
-}
-
-.site-header nav {
-  display: flex;
-  gap: 1rem;
-}
-
-.site-header nav a {
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.session-form {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-left: auto;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .site-header .brand {
   font-weight: 700;
   color: var(--crimson);
   text-decoration: none;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem;
+.site-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  flex: 1 1 auto;
 }
+
+.site-header nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.site-header nav a:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+  border-color: var(--border-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.session-form {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.session-form .muted {
+  font-size: 0.85rem;
+}
+
+.session-form button {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.86rem;
+}
+
+/* -------------------- Layout -------------------- */
+
+main {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 3rem 2rem 4rem;
+}
+
+main h1 {
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.25rem;
+}
+
+h2 {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  margin: 2rem 0 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* -------------------- Card surfaces --------------------
+   `main`'s direct children map 1:1 to page sections in this app's markup, so styling them
+   structurally gives every form/table/dl/list a consistent card without touching component
+   JSX. Tables are the one exception -- they're wrapped in .table-scroll so a table wider than
+   the viewport (more columns than a narrow screen can fit) scrolls inside its own card instead
+   of blowing out the whole page horizontally. */
+
+main > form,
+main > dl,
+main > ul,
+.table-scroll {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+main > form {
+  padding: 1.75rem;
+  gap: 1.25rem;
+}
+
+/* The filter toolbar is also a direct child <form> -- override the big padded-card treatment
+   with a compact horizontal bar instead. */
+.filter-form {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.filter-form label {
+  gap: 0.25rem;
+}
+
+/* -------------------- Tables -------------------- */
 
 table {
   width: 100%;
   border-collapse: collapse;
+  overflow: hidden;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.5rem;
+  padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--border);
 }
+
+th {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--canvas);
+  font-weight: 700;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+tbody tr:hover {
+  background: var(--hover-bg);
+}
+
+td a {
+  color: var(--crimson);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+td a:hover {
+  text-decoration: underline;
+}
+
+/* -------------------- Forms -------------------- */
 
 form {
   display: flex;
@@ -73,59 +304,170 @@ form {
   gap: 1rem;
 }
 
-.filter-form {
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
 label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
   font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
 }
 
 input,
 select,
 textarea {
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px var(--crimson-tint-strong);
+}
+
+/* -------------------- Buttons -------------------- */
 
 button {
   background: var(--crimson);
-  color: var(--paper);
+  color: #fff;
   border: none;
   padding: 0.6rem 1.2rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
   align-self: flex-start;
+  transition: background-color 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+button:hover:not(:disabled) {
+  background: var(--crimson-dark);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
+/* -------------------- Misc -------------------- */
+
 .error {
-  color: #b00020;
+  color: var(--error-text);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .muted {
   color: var(--muted);
 }
 
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.6rem 1.5rem;
+  padding: 1.75rem;
+  margin: 0 0 1.5rem;
+}
+
+dt {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+dd {
+  margin: 0;
+  font-weight: 500;
+}
+
 .files-list {
   list-style: none;
-  padding: 0;
+  padding: 1.25rem 1.5rem;
+  margin: 0;
 }
 
 .files-list li {
-  padding: 0.4rem 0;
+  padding: 0.6rem 0;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.files-list li:last-child {
+  border-bottom: none;
+}
+
+.files-list a {
+  color: var(--crimson);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.files-list a:hover {
+  text-decoration: underline;
+}
+
+/* -------------------- Status badges --------------------
+   Presentational only -- same status values, just visually distinguished. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--canvas);
+  color: var(--ink-soft);
+  border: 1px solid var(--border-strong);
+}
+
+.badge[data-status='ready_for_pickup'] {
+  background: var(--crimson);
+  color: #fff;
+  border-color: var(--crimson);
+}
+
+.badge[data-status='in_production'],
+.badge[data-status='files_received'] {
+  background: var(--crimson-tint);
+  color: var(--crimson);
+  border-color: var(--crimson-tint-strong);
+}
+
+.badge[data-status='completed'] {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+}
+
+.badge[data-status='cancelled'] {
+  background: transparent;
+  color: var(--muted);
+  text-decoration: line-through;
 }

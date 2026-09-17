@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1787289479693,
+      "tag": "0000_breezy_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1788727588973,
+      "tag": "0001_soft_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789576859319,
+      "tag": "0002_steady_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1789577353791,
+      "tag": "0003_bizarre_solo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1789592262491,
+      "tag": "0004_slimy_firebird",
+      "breakpoints": true
+    }
+  ]
+}
