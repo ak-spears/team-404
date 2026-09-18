@@ -38,11 +38,13 @@ export default async function CatalogPage({ searchParams }: PageProps) {
 
   return (
     <>
+
       {homeError && (
         <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '0.5rem', background: '#fde7e7', color: '#7f1d1d', border: '1px solid #f5b7b1' }}>
           {homeError}
         </div>
       )}
+
       <section className="masthead">
         <h1 className="masthead-title">Crimson Copies</h1>
         <p className="masthead-tagline">Order printing, posters, and copies -- no email required.</p>
@@ -50,10 +52,18 @@ export default async function CatalogPage({ searchParams }: PageProps) {
       <section className="intro">
         <h2>Service catalog</h2>
         <p>
+
           Sign in to place an order and manage your print jobs.
         </p>
         <a href="/auth/login" className="btn-primary">
           Sign in to order
+
+          Submit an order online -- no more emailing files back and forth.{' '}
+          <a href="/order">Place an order</a>, no account required.
+        </p>
+        <a href="/order" className="btn-primary">
+          Place an order
+
         </a>
       </section>
       <div className="table-scroll">

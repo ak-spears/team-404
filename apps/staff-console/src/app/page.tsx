@@ -39,7 +39,11 @@ function isOrderStatus(value: string): value is OrderStatus {
         </td>
         <td>{order.serviceType}</td>
         <td>{order.quantity}</td>
-        <td>{order.status}</td>
+        <td>
+          <span className="badge" data-status={order.status}>
+            {order.status}
+          </span>
+        </td>
         <td>{new Date(order.createdAt).toLocaleDateString()}</td>
       </tr>,
     );
@@ -65,18 +69,20 @@ function isOrderStatus(value: string): value is OrderStatus {
       {orders.length === 0 ? (
         <p className="muted">No orders match this filter.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Service</th>
-              <th>Qty</th>
-              <th>Status</th>
-              <th>Submitted</th>
-            </tr>
-          </thead>
-          <tbody>{orderRows}</tbody>
-        </table>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Service</th>
+                <th>Qty</th>
+                <th>Status</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>{orderRows}</tbody>
+          </table>
+        </div>
       )}
     </>
   );

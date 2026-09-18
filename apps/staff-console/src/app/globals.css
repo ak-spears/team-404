@@ -89,11 +89,20 @@ body {
 a {
   color: var(--crimson);
   text-underline-offset: 2px;
+
 }
 
 a:hover {
   color: var(--crimson-dark);
 }
+
+=======
+}
+
+a:hover {
+  color: var(--crimson-dark);
+}
+
 
 /* -------------------- Header -------------------- */
 
@@ -182,12 +191,22 @@ a:hover {
 
 .session-form .muted {
   font-size: 0.85rem;
+
 }
 
 .session-form button {
   padding: 0.45rem 0.85rem;
   font-size: 0.86rem;
 }
+
+=======
+}
+
+.session-form button {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.86rem;
+}
+
 
 /* -------------------- Layout -------------------- */
 
@@ -236,8 +255,7 @@ main > form {
   gap: 1.25rem;
 }
 
-/* The filter toolbar is also a direct child <form> -- override the big padded-card treatment
-   with a compact horizontal bar instead. */
+
 .filter-form {
   flex-direction: row;
   align-items: flex-end;
@@ -250,7 +268,6 @@ main > form {
   gap: 0.25rem;
 }
 
-/* -------------------- Tables -------------------- */
 
 table {
   width: 100%;
@@ -296,7 +313,7 @@ td a:hover {
   text-decoration: underline;
 }
 
-/* -------------------- Forms -------------------- */
+
 
 form {
   display: flex;
@@ -323,6 +340,7 @@ textarea {
   color: var(--ink);
   background: var(--paper);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
 }
 
 input:focus,
@@ -333,7 +351,17 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--crimson-tint-strong);
 }
 
-/* -------------------- Buttons -------------------- */
+
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px var(--crimson-tint-strong);
+}
+
 
 button {
   background: var(--crimson);
@@ -458,6 +486,20 @@ dd {
   background: var(--crimson-tint);
   color: var(--crimson);
   border-color: var(--crimson-tint-strong);
+
+}
+
+.badge[data-status='completed'] {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+}
+
+.badge[data-status='cancelled'] {
+  background: transparent;
+  color: var(--muted);
+  text-decoration: line-through;
+
 }
 
 .badge[data-status='completed'] {

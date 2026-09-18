@@ -38,6 +38,7 @@ export default async function MyOrdersPage() {
             {order.status}
           </span>
         </td>
+
       </tr>,
     );
   }
@@ -107,6 +108,7 @@ export const dynamic = 'force-dynamic';
         </td>
         <td>{order.serviceType}</td>
         <td>{order.status}</td>
+
       </tr>,
     );
   }
@@ -117,16 +119,18 @@ export const dynamic = 'force-dynamic';
       {orders.length === 0 ? (
         <p>No orders yet. <a href="/order">Place one</a>.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Service</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>{orderRows}</tbody>
-        </table>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Service</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>{orderRows}</tbody>
+          </table>
+        </div>
       )}
     </>
   );

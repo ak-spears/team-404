@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+// Hosted (Caddy fronts both apps on one origin): "/staff" reaches the staff console. Local
+// dev runs the apps on separate ports with no proxy, so a relative path can't cross over --
+// fall back to the staff console's dev port. Override STAFF_CONSOLE_URL for any non-standard
+// setup.
+const DEFAULT_STAFF_CONSOLE_URL =
+  process.env.NODE_ENV === 'production' ? '/staff' : 'http://localhost:3001/staff';
+
 /** Server-only environment -- nothing here is ever exposed to a Client Component bundle. */
 const envSchema = z.object({
   ORDERS_API_URL: z.string().default('http://127.0.0.1:4000'),
@@ -13,10 +20,8 @@ const envSchema = z.object({
   AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required').optional(),
   AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required').optional(),
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
-  // Where the storefront's "Staff sign in" link points. On the VM the staff console is a path
-  // on this same hostname (Caddy routes it), so the default relative "/staff" is correct there.
-  // Local dev has no reverse proxy -- set http://localhost:3001/staff .
-  STAFF_CONSOLE_URL: z.string().default('/staff'),
+  // Where the storefront's "Staff sign in" link points.
+  STAFF_CONSOLE_URL: z.string().default(DEFAULT_STAFF_CONSOLE_URL),
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -3,7 +3,9 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import { cookies } from 'next/headers';
 import './globals.css';
 import { ThemeToggle } from '../components/ThemeToggle';
+
 import { auth0 } from '../lib/auth0';
+
 import { loadConfig } from '../lib/config';
 import { getSession } from '../lib/session';
 
@@ -21,12 +23,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const authSession = await auth0.getSession();
   const { STAFF_CONSOLE_URL } = loadConfig();
 
+
   const signedInName =
     authSession?.user?.email ??
     authSession?.user?.name ??
     authSession?.user?.nickname ??
     localSession?.username ??
     null;
+
 
   // Read the saved theme cookie server-side so the very first byte of HTML already has the
   // right data-theme attribute -- no client script race, no flash on full page navigations
@@ -50,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </nav>
           <div className="header-actions">
             <ThemeToggle />
+
             {signedInName ? (
               <span className="session-form">
                 <span className="muted">Signed in as {signedInName}</span>
@@ -59,6 +64,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : (
               <span className="session-form">
                 <a href="/auth/login">Sign in</a>
+
+            {session ? (
+              <form action="/logout" method="POST" className="session-form">
+                <span className="muted">Signed in as {session.username}</span>
+                <button type="submit">Log out</button>
+                <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
+              </form>
+            ) : (
+              <span className="session-form">
+                <a href="/login">Sign in</a>
+
                 <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
               </span>
             )}
