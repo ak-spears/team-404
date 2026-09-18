@@ -52,6 +52,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <a href="/order">Place an order</a>
             <a href="/orders">My orders</a>
           </nav>
+
+
+
+
           <div className="header-actions">
             <ThemeToggle />
 

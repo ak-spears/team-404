@@ -49,23 +49,32 @@ export default async function CatalogPage({ searchParams }: PageProps) {
         <h1 className="masthead-title">Crimson Copies</h1>
         <p className="masthead-tagline">Order printing, posters, and copies -- no email required.</p>
       </section>
-      <section className="intro">
+      
+      
+        <section className="intro">
         <h2>Service catalog</h2>
-        <p>
 
-          Sign in to place an order and manage your print jobs.
-        </p>
+        <p>Sign in to place an order and manage your print jobs.</p>
+
         <a href="/auth/login" className="btn-primary">
           Sign in to order
+        </a>
 
+        <p>
           Submit an order online -- no more emailing files back and forth.{' '}
           <a href="/order">Place an order</a>, no account required.
         </p>
+
         <a href="/order" className="btn-primary">
           Place an order
-
         </a>
       </section>
+      
+      
+      
+      
+   
+  
       <div className="table-scroll">
         <table>
           <thead>
