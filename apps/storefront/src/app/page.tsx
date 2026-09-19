@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers';
 import { PRICING_TABLE_CENTS, SERVICE_TYPES, type ServiceType } from '@crimson-copies/shared';
+import { auth0 } from '../lib/auth0';
+import { getSession } from '../lib/session';
 
 // department_job's label was slotted in at the top when the quoted-pricing case landed --
 // the rest are still in their original order.
@@ -36,6 +38,10 @@ export default async function CatalogPage({ searchParams }: PageProps) {
   const flashError = cookieStore.get('ua_email_error')?.value;
   const homeError = getHomePageErrorMessage(error) || (flashError === 'ua-email-required' ? getHomePageErrorMessage('ua-email-required') : null);
 
+  const localSession = await getSession();
+  const authSession = await auth0.getSession();
+  const signedIn = Boolean(authSession?.user || localSession);
+
   return (
     <>
 
@@ -49,32 +55,30 @@ export default async function CatalogPage({ searchParams }: PageProps) {
         <h1 className="masthead-title">Crimson Copies</h1>
         <p className="masthead-tagline">Order printing, posters, and copies -- no email required.</p>
       </section>
-      
-      
-        <section className="intro">
+
+      <section className="intro">
         <h2>Service catalog</h2>
 
-        <p>Sign in to place an order and manage your print jobs.</p>
+        {signedIn ? (
+          <p>
+            Submit an order online -- no more emailing files back and forth.{' '}
+            <a href="/order">Place an order</a>, no account required.
+          </p>
+        ) : (
+          <p>Sign in to place an order and manage your print jobs.</p>
+        )}
 
-        <a href="/auth/login" className="btn-primary">
-          Sign in to order
-        </a>
-
-        <p>
-          Submit an order online -- no more emailing files back and forth.{' '}
-          <a href="/order">Place an order</a>, no account required.
-        </p>
-
-        <a href="/order" className="btn-primary">
-          Place an order
-        </a>
+        {signedIn ? (
+          <a href="/order" className="btn-primary">
+            Place an order
+          </a>
+        ) : (
+          <a href="/auth/login" className="btn-primary">
+            Sign in to order
+          </a>
+        )}
       </section>
-      
-      
-      
-      
-   
-  
+
       <div className="table-scroll">
         <table>
           <thead>
