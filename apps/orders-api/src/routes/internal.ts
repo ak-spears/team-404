@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import {
   fileRegistrationInputSchema,
   googleAuthCodeInputSchema,
+  isUaEmail,
+  setCwidInputSchema,
   uploadCredentialsVerifyInputSchema,
   userCredentialsVerifyInputSchema,
 } from '@crimson-copies/shared';
@@ -121,10 +123,10 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
     return reply.code(200).send({ userId: result.userId, username: result.username, role: result.role });
   });
 
-
-    // Called by the storefront's Google OAuth callback after it has verified the ID token
+  // Called by the storefront's Google OAuth callback after it has verified the ID token
   // server-side. orders-api looks up or creates the linked user and returns identity info,
   // same contract as verify-credentials -- the caller establishes the session afterward.
+  // Non-UA emails always return requiresCwid so the storefront collects a CWID every time.
   app.post('/internal/auth/verify-google', { preHandler: requireInternalKey }, async (request, reply) => {
     const parsed = googleAuthCodeInputSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -152,7 +154,36 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       email: payload.email,
       name: payload.name,
     });
-    console.log('google login verified', { userId: result.userId, role: result.role });
-    return reply.code(200).send({ userId: result.userId, username: result.username, role: result.role });
+    const requiresCwid = !isUaEmail(payload.email);
+    console.log('google login verified', {
+      userId: result.userId,
+      role: result.role,
+      requiresCwid,
+    });
+    return reply.code(200).send({
+      userId: result.userId,
+      username: result.username,
+      role: result.role,
+      requiresCwid,
+    });
+  });
+
+  // Called by the storefront after a non-UA Google user submits their CWID.
+  app.post('/internal/auth/set-cwid', { preHandler: requireInternalKey }, async (request, reply) => {
+    const parsed = setCwidInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    const result = await options.repository.setUserCwid(parsed.data.userId, parsed.data.cwid);
+    if (!result) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    console.log('cwid set', { userId: result.userId });
+    return reply.code(200).send({
+      userId: result.userId,
+      username: result.username,
+      role: result.role,
+    });
   });
 }

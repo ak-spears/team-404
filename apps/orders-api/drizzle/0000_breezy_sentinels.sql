@@ -62,6 +62,7 @@ CREATE TABLE `users` (
 	`username` varchar(64) NOT NULL,
 	`password_hash` varchar(255) NOT NULL,
 	`role` enum('customer','staff') NOT NULL,
+	`CWID` int,
 	`created_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `users_id` PRIMARY KEY(`id`),
 	CONSTRAINT `users_username_unique` UNIQUE(`username`)

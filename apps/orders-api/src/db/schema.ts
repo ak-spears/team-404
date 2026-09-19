@@ -25,6 +25,8 @@ export const users = mysqlTable('users', {
   username: varchar('username', { length: 64 }).notNull().unique(),
   // bcrypt hash; the plaintext is never stored.
   passwordHash: varchar('password_hash', { length: 255 }),
+  // Campus-Wide ID -- required for non-UA Google accounts; null for @ua.edu / @crimson.ua.edu.
+  cwid: varchar('cwid', { length: 32 }),
   role: mysqlEnum('role', ['customer', 'staff']).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -116,10 +118,6 @@ export const googleIdentities = mysqlTable('google_identities', {
 export const googleIdentitiesRelations = relations(googleIdentities, ({ one }) => ({
   user: one(users, { fields: [googleIdentities.userId], references: [users.id] }),
 }));
-
-
-
-
 
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),

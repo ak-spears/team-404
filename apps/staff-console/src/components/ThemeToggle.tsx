@@ -28,10 +28,7 @@ function MoonIcon() {
   );
 }
 
-/** Presentational theme switch -- persists a light/dark override to a cookie (read by the
- * server layout, so full page navigations render the right theme with no flash) and toggles
- * `data-theme` on <html> immediately for instant feedback. No effect on any account/session/
- * order state. */
+
 export function ThemeToggle() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -46,8 +43,13 @@ export function ThemeToggle() {
     setTheme(next);
   }
 
-  return (
-    <button type="button" className="theme-toggle" onClick={toggle} aria-label="Toggle dark mode">
+   return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={toggle}
+      aria-label="Toggle dark mode"
+    >
       {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>
   );

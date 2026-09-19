@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import { cookies } from 'next/headers';
 import './globals.css';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { auth0 } from '../lib/auth0';
 import { loadConfig } from '../lib/config';
 import { getSession } from '../lib/session';
 
@@ -16,14 +17,18 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
+  const localSession = await getSession();
+  const authSession = await auth0.getSession();
   const { STAFF_CONSOLE_URL } = loadConfig();
 
-  // Read the saved theme cookie server-side so the very first byte of HTML already has the
-  // right data-theme attribute -- no client script race, no flash on full page navigations
-  // (this app's nav links are plain <a> tags, so every click is a fresh server render).
-  // No cookie means "follow the OS", which the prefers-color-scheme media query in globals.css
-  // handles on its own.
+  const signedInName =
+    authSession?.user?.email ??
+    authSession?.user?.name ??
+    authSession?.user?.nickname ??
+    localSession?.username ??
+    null;
+
+
   const themeCookie = (await cookies()).get('cc-theme')?.value;
   const theme = themeCookie === 'light' || themeCookie === 'dark' ? themeCookie : undefined;
 
@@ -41,15 +46,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </nav>
           <div className="header-actions">
             <ThemeToggle />
-            {session ? (
-              <form action="/logout" method="POST" className="session-form">
-                <span className="muted">Signed in as {session.username}</span>
-                <button type="submit">Log out</button>
+            {signedInName ? (
+              <span className="session-form">
+                <span className="muted">Signed in as {signedInName}</span>
+                <a href={authSession ? '/auth/logout' : '/logout'}>Log out</a>
                 <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
-              </form>
+              </span>
             ) : (
               <span className="session-form">
-                <a href="/login">Sign in</a>
+                <a href="/auth/login">Sign in</a>
                 <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
               </span>
             )}

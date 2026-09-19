@@ -1,3 +1,5 @@
+
+import { isAllowedLoginUsername } from "@crimson-copies/shared";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { callOrdersApi } from "../../lib/internal-api";
@@ -53,7 +55,7 @@ async function login(formData: FormData): Promise<void> {
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
-  if (!username || !password) {
+  if (!username || !password || !isAllowedLoginUsername(username)) {
     redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
   }
 

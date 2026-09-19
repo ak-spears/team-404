@@ -236,8 +236,6 @@ main > form {
   gap: 1.25rem;
 }
 
-/* The filter toolbar is also a direct child <form> -- override the big padded-card treatment
-   with a compact horizontal bar instead. */
 .filter-form {
   flex-direction: row;
   align-items: flex-end;
@@ -249,8 +247,6 @@ main > form {
 .filter-form label {
   gap: 0.25rem;
 }
-
-/* -------------------- Tables -------------------- */
 
 table {
   width: 100%;
@@ -296,8 +292,6 @@ td a:hover {
   text-decoration: underline;
 }
 
-/* -------------------- Forms -------------------- */
-
 form {
   display: flex;
   flex-direction: column;
@@ -332,8 +326,6 @@ textarea:focus {
   border-color: var(--crimson);
   box-shadow: 0 0 0 3px var(--crimson-tint-strong);
 }
-
-/* -------------------- Buttons -------------------- */
 
 button {
   background: var(--crimson);

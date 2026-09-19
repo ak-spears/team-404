@@ -21,3 +21,4 @@ next-env.d.ts
 # Local secrets (see .env.example)
 .env
 .env.local
+.neon
