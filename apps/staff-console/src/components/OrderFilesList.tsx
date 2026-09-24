@@ -10,6 +10,12 @@ interface OrderFileLink {
   url: string;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function isOrderFileLinks(value: unknown): value is { files: OrderFileLink[] } {
   return typeof value === 'object' && value !== null && Array.isArray((value as { files?: unknown }).files);
 }
@@ -56,7 +62,7 @@ export function OrderFilesList({ orderId }: { orderId: number }) {
             {file.originalFilename}
           </a>{' '}
           <span className="muted">
-            ({file.sizeBytes} bytes, uploaded {new Date(file.uploadedAt).toLocaleString()})
+            ({formatBytes(file.sizeBytes)}, uploaded {new Date(file.uploadedAt).toLocaleString()})
           </span>
         </li>
       ))}

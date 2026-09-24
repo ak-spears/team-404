@@ -8,6 +8,7 @@
 #
 # ROUTING
 #   /staff, /staff/*   -> staff-console  (127.0.0.1:3001)
+#   /order-files/*     -> MinIO          (127.0.0.1:9000), presigned download links only
 #   everything else     -> storefront     (127.0.0.1:3000), failing over to the :8080 starter
 #                                          page until the team's first deploy
 #
@@ -35,6 +36,22 @@
 	@staff path /staff /staff/*
 	handle @staff {
 		reverse_proxy 127.0.0.1:3001
+	}
+
+	# Uploaded order files, fetched straight from MinIO by the staff browser.
+	#
+	# MinIO uses path-style addressing, so the bucket name IS the first path segment -- this
+	# matcher is the `order-files` bucket (staff-console's MINIO_BUCKET), not an app route.
+	# Only presigned URLs work here: the bucket has no anonymous read policy, so an
+	# unsigned request gets a 403 from MinIO itself, and the 15-minute signature
+	# (apps/staff-console/src/lib/minio.ts) is what actually grants access.
+	#
+	# The signature covers the Host header, which is why staff-console signs these links for
+	# the PUBLIC hostname (MINIO_PUBLIC_ENDPOINT) rather than 127.0.0.1 -- and why this proxy
+	# must pass the incoming Host through unchanged, which is Caddy's default.
+	@files path /order-files/*
+	handle @files {
+		reverse_proxy 127.0.0.1:9000
 	}
 
 	# Everything else -> the customer storefront.

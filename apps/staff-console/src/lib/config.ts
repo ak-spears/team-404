@@ -28,6 +28,17 @@ const envSchema = z.object({
   MINIO_ACCESS_KEY: z.string().default('minioadmin'),
   MINIO_SECRET_KEY: z.string().default('minioadmin'),
   MINIO_BUCKET: z.string().default('order-files'),
+  // A presigned URL is signed for the host the STAFF BROWSER will request, not the address
+  // staff-console reaches MinIO on: SigV4 covers the Host header, so a link signed for
+  // 127.0.0.1 cannot be rewritten to the public hostname afterwards -- the signature breaks.
+  // On the VM these name the team's public host, where Caddy proxies /<bucket>/* to MinIO
+  // (deploy/vm/Caddyfile). Unset locally, where the browser reaches MinIO directly.
+  MINIO_PUBLIC_ENDPOINT: z.string().optional(),
+  MINIO_PUBLIC_PORT: z.coerce.number().int().optional(),
+  MINIO_PUBLIC_USE_SSL: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -38,6 +38,7 @@ flowchart LR
 
     browser --> ingress --> caddy
     caddy -->|"/staff, /staff/*"| sc
+    caddy -->|"/order-files/* (presigned)"| minio
     caddy -->|"everything else"| sf
     caddy -.->|"failover when 3000 is down"| starter
 
@@ -45,7 +46,8 @@ flowchart LR
     sc -->|"X-Internal-Key"| api
     api -->|"sole writer"| mysql
     api -->|"X-Internal-Key"| notify
-    sc -->|"presigned GET"| minio
+    api -->|"putObject"| minio
+    sc -.->|"mints presigned GET"| minio
 
     style notify stroke-dasharray: 5 5
 ```
@@ -221,42 +223,50 @@ checkout flow — but it does mean order ids are guessable.
 
 ## 5. File handling
 
-MinIO is installed and the `order-files` bucket exists. staff-console can mint presigned
-download links. **But nothing ever writes a file.**
+Customers upload their print files from the browser. orders-api is the only writer to MinIO,
+the same way it is the only writer to MySQL; staff-console reads with its own scoped,
+read-only credentials and never proxies the bytes.
 
 ```mermaid
 flowchart LR
-    subgraph works["Works today"]
-        api["orders-api<br/>mints one-time SFTP credential<br/>bcrypt hashed, 7-day expiry"]
-        sc["staff-console<br/>reads order_files,<br/>presigns 15-min GET"]
-        minio[("MinIO<br/>order-files")]
-        sc --> minio
-    end
+    cust["Customer browser"] -->|"multipart"| sf["storefront BFF<br/>streams, no buffering"]
+    sf -->|"X-Internal-Key"| api["orders-api<br/>POST /api/orders/:id/files"]
+    api -->|"putObject"| minio[("MinIO<br/>order-files")]
+    api -->|"order_files row<br/>+ file_uploaded event"| mysql[("MySQL")]
+    api -.->|"first file only"| notify["notify<br/>files-received"]
 
-    subgraph missing["Does not exist"]
-        intake["services/file-intake<br/>SFTP server on :2222"]
-    end
+    staff["Staff browser"] -->|"presigned GET, 15 min"| caddy["Caddy /order-files/*"]
+    caddy --> minio
+    sc["staff-console"] -->|"mints the link"| staff
 
-    cust["Customer"] -.->|"no server listening"| intake
-    intake -.->|"never called"| upload["POST /internal/orders/:id/files"]
-    upload -.->|"would insert"| files[("order_files table")]
-    files -.-> sc
-
-    style missing stroke-dasharray: 5 5
-    style intake stroke-dasharray: 5 5
+    style notify stroke-dasharray: 5 5
 ```
 
-The chain is built from both ends and missing its middle:
+How it holds together:
 
-- `orders-api` **does** mint a real one-time SFTP credential per order and returns it once.
-- The endpoint that would record an upload, `POST /internal/orders/:id/files`, exists and
-  works — but **has no caller anywhere in the repo**.
-- `services/file-intake`, referenced in comments and in the shared schemas, **does not
-  exist**. Nothing listens on port 2222.
-- So `order_files` is always empty, and staff-console's file list always renders "No files
-  uploaded yet."
-- The storefront does not show the credential to the customer; it renders a "File upload:
-  coming soon" placeholder instead.
+- **The object is written before the row.** If the stream is truncated by the 50MB limit, or
+  the insert fails, the object is deleted again — so no `order_files` row ever points at bytes
+  that aren't there.
+- **Object keys are `<order_id>/<uuid>-<sanitised filename>`.** The UUID keeps two customers'
+  `resume.pdf` apart and makes the key unguessable; the original name is kept in MySQL for
+  staff to read.
+- **Uploads are checked against an extension allowlist** (documents and images) and capped at
+  50MB, enforced on the incoming stream rather than after buffering.
+- **The first file advances the order to `files_received`** and triggers the one notify call.
+  Subsequent files are recorded without repeating it.
+- **Downloads are presigned, not proxied.** staff-console signs a 15-minute GET against the
+  *public* hostname, because SigV4 covers the `Host` header — a link signed for `127.0.0.1`
+  cannot be rewritten afterwards. Caddy forwards `/order-files/*` to MinIO unchanged. The
+  bucket has no anonymous read policy, so an unsigned or tampered URL gets a 403 from MinIO.
+
+Still unfinished here:
+
+- `services/file-intake`, the SFTP server referenced in comments and shared schemas, **does
+  not exist**; nothing listens on port 2222. orders-api still mints a one-time SFTP credential
+  per order and returns it once, and nothing consumes it. `order_files.uploaded_via` keeps the
+  `'sftp'` value for the rows that service would have written.
+- `POST /internal/orders/:id/files` (the registration endpoint that SFTP path would call)
+  still has no caller.
 
 ---
 
@@ -277,5 +287,5 @@ Each diagram, and the file and function each claim was read from.
 | 4. Internal key | `apps/orders-api/src/plugins/internal-auth.ts` → `createRequireInternalKey()`; `services/notify/src/plugins/internal-auth.ts` → `createRequireInternalKey()` |
 | 4. Per-route rules | `apps/orders-api/src/routes/orders.ts` → `isForbiddenForCustomer()` and the `mine` branch of `GET /api/orders` |
 | 4. Redirect gap | Observed against all three live VMs; `Location` header read directly from the response |
-| 5. File handling | `apps/orders-api/src/repositories/orders-repository.ts` → `createOrder()` and `registerUploadedFile()`; `apps/orders-api/src/routes/internal.ts` → `POST /internal/orders/:id/files` (no caller); `apps/staff-console/src/lib/minio.ts` → `presignFileUrl()`; `apps/storefront/src/components/UploadInstructionsCard.tsx` |
+| 5. File handling | `apps/orders-api/src/routes/orders.ts` → `POST /api/orders/:id/files`; `apps/orders-api/src/lib/storage.ts` → `ensureBucket()`; `orders-repository.ts` → `registerUploadedFile()`; `apps/storefront/src/app/api/orders/[id]/files/route.ts` → `POST()`; `apps/storefront/src/components/OrderFileUpload.tsx`; `apps/staff-console/src/lib/minio.ts` → `presignFileUrl()`; `deploy/vm/Caddyfile` → `@files path /order-files/*` |
 | 5. Sole MySQL writer | Only `apps/orders-api/**` imports `drizzle-orm` / `mysql2`; only `apps/staff-console/src/lib/minio.ts` imports `minio` |
