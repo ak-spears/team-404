@@ -1,8 +1,8 @@
 {
+  "id": "5a5561c8-7b7a-46a3-8faf-6bcfd6809dd0",
+  "prevId": "04c8dd51-bd02-432b-b209-cdf07af37edd",
   "version": "5",
   "dialect": "mysql",
-  "id": "931a2472-050a-4661-bbb6-d1cd5a44b058",
-  "prevId": "b63ba12d-ba3b-4ae1-88b7-86a665fda72b",
   "tables": {
     "customers": {
       "name": "customers",
@@ -56,15 +56,15 @@
         "customers_user_id_users_id_fk": {
           "name": "customers_user_id_users_id_fk",
           "tableFrom": "customers",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -130,15 +130,15 @@
         "google_identities_user_id_users_id_fk": {
           "name": "google_identities_user_id_users_id_fk",
           "tableFrom": "google_identities",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -160,86 +160,6 @@
           "name": "google_identities_google_id_unique",
           "columns": [
             "google_id"
-          ]
-        }
-      },
-      "checkConstraint": {}
-    },
-    "microsoft_identities": {
-      "name": "microsoft_identities",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "microsoft_id": {
-          "name": "microsoft_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "microsoft_identities_user_id_users_id_fk": {
-          "name": "microsoft_identities_user_id_users_id_fk",
-          "tableFrom": "microsoft_identities",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "microsoft_identities_id": {
-          "name": "microsoft_identities_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {
-        "microsoft_identities_user_id_unique": {
-          "name": "microsoft_identities_user_id_unique",
-          "columns": [
-            "user_id"
-          ]
-        },
-        "microsoft_identities_microsoft_id_unique": {
-          "name": "microsoft_identities_microsoft_id_unique",
-          "columns": [
-            "microsoft_id"
           ]
         }
       },
@@ -297,15 +217,15 @@
         "order_events_order_id_orders_id_fk": {
           "name": "order_events_order_id_orders_id_fk",
           "tableFrom": "order_events",
-          "tableTo": "orders",
           "columnsFrom": [
             "order_id"
           ],
+          "tableTo": "orders",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -379,15 +299,15 @@
         "order_files_order_id_orders_id_fk": {
           "name": "order_files_order_id_orders_id_fk",
           "tableFrom": "order_files",
-          "tableTo": "orders",
           "columnsFrom": [
             "order_id"
           ],
+          "tableTo": "orders",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -452,15 +372,15 @@
         "order_upload_credentials_order_id_orders_id_fk": {
           "name": "order_upload_credentials_order_id_orders_id_fk",
           "tableFrom": "order_upload_credentials",
-          "tableTo": "orders",
           "columnsFrom": [
             "order_id"
           ],
+          "tableTo": "orders",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -556,8 +476,8 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
+          "default": "(now())",
+          "onUpdate": true
         },
         "pickup_ready_at": {
           "name": "pickup_ready_at",
@@ -579,15 +499,15 @@
         "orders_customer_id_customers_id_fk": {
           "name": "orders_customer_id_customers_id_fk",
           "tableFrom": "orders",
-          "tableTo": "customers",
           "columnsFrom": [
             "customer_id"
           ],
+          "tableTo": "customers",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -671,9 +591,9 @@
   },
   "views": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
+    "tables": {}
   },
   "internal": {
     "tables": {},
