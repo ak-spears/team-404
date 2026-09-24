@@ -49,7 +49,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {signedInName ? (
               <span className="session-form">
                 <span className="muted">Signed in as {signedInName}</span>
-                <a href={authSession ? '/auth/logout' : '/logout'}>Log out</a>
+                {/* Temporary: restore Auth0 logout once Allowed Logout URLs include /signed-out */}
+                <form action="/logout" method="post">
+                  <button type="submit">Log out</button>
+                </form>
                 <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
               </span>
             ) : (
