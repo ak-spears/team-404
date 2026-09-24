@@ -1,5 +1,8 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server';
 import { NextResponse } from 'next/server';
+import {cookies} from 'next/headers';
+import {callOrdersApi} from '../lib/internal-api';
+import { createSessionCookieValue, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS} from './session';
 
 const UA_EMAIL_ERROR_COOKIE = 'ua_email_error';
 
@@ -76,7 +79,54 @@ export const auth0 = new Auth0Client({
       return buildUaEmailErrorRedirect(ctx.appBaseUrl);
     }
 
+    const result = await callOrdersApi<{ userId: number; username: string; role: 'customer' | 'staff' }>({
+      method: 'POST',
+      path: '/internal/auth/verify-auth0-email',
+      body: { email },
+    });
+
+    if (result.status === 200) {
+      const store = await cookies();
+      store.set(
+        SESSION_COOKIE_NAME,
+        createSessionCookieValue({
+          userId: result.body.userId,
+          username: result.body.username,
+          role: result.body.role,
+        }),
+        { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_TTL_SECONDS },
+      );
+    }
+
     const redirectUrl = new URL(ctx.returnTo || '/', ctx.appBaseUrl || process.env.APP_BASE_URL || 'http://localhost:3000');
     return NextResponse.redirect(redirectUrl.toString());
   },
 });
+
+/*
+const email = getSessionEmail(session);
+if (!isAllowedAuthEmail(email)) {
+  return buildUaEmailErrorRedirect(ctx.appBaseUrl);
+}
+
+const result = await callOrdersApi<{ userId: number; username: string; role: 'customer' | 'staff' }>({
+  method: 'POST',
+  path: '/internal/auth/verify-auth0-email',
+  body: { email },
+});
+
+if (result.status === 200) {
+  const store = await cookies();
+  store.set(
+    SESSION_COOKIE_NAME,
+    createSessionCookieValue({
+      userId: result.body.userId,
+      username: result.body.username,
+      role: result.body.role,
+    }),
+    { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_TTL_SECONDS },
+  );
+}
+
+const redirectUrl = new URL(ctx.returnTo || '/', ctx.appBaseUrl || process.env.APP_BASE_URL || 'http://localhost:3000');
+return NextResponse.redirect(redirectUrl.toString());*/

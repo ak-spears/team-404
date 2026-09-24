@@ -18,13 +18,33 @@ export default async function MyOrdersPage() {
 
   if (!isAuthenticated) redirect('/login?next=/orders');
 
-  const result = await callOrdersApi<Order[]>({
-    method: 'GET',
-    path: '/api/orders',
-    role: session?.role,
-    userId: session ? String(session.userId) : undefined,
-    searchParams: { mine: 'true' },
+    let userId = session ? String(session.userId) : undefined;
+    let role = session?.role;
+
+if (!userId && authSession?.user?.email) {
+  const localUser = await callOrdersApi<{
+    userId: number;
+    username: string;
+    role: 'customer' | 'staff';
+  }>({
+    method: 'POST',
+    path: '/internal/auth/verify-auth0-email',
+    body: { email: authSession.user.email },
   });
+
+  if (localUser.status === 200) {
+    userId = String(localUser.body.userId);
+    role = localUser.body.role;
+  }
+}
+
+const result = await callOrdersApi<Order[]>({
+  method: 'GET',
+  path: '/api/orders',
+  role,
+  userId,
+  searchParams: { mine: 'true' },
+});
 
   const orders = Array.isArray(result.body) ? result.body : [];
 

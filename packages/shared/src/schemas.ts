@@ -37,6 +37,12 @@ export const setCwidInputSchema = z.object({
 });
 export type SetCwidInput = z.infer<typeof setCwidInputSchema>;
 
+/** Body of `POST /internal/auth/verify-auth0-email` (storefront BFF -> orders-api). */
+export const auth0EmailVerifyInputSchema = z.object({
+  email: z.email(),
+});
+export type Auth0EmailVerifyInput = z.infer<typeof auth0EmailVerifyInputSchema>;
+
 /** True when the email is a UA address that skips the CWID gate. */
 export function isUaEmail(email: string): boolean {
   const normalized = email.trim().toLowerCase();

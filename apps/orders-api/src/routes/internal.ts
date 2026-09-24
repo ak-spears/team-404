@@ -6,6 +6,7 @@ import {
   setCwidInputSchema,
   uploadCredentialsVerifyInputSchema,
   userCredentialsVerifyInputSchema,
+  auth0EmailVerifyInputSchema,
 } from '@crimson-copies/shared';
 import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
@@ -186,4 +187,24 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       role: result.role,
     });
   });
+// Called by the storefront's Auth0 callback after it has verified the email is an allowed UA
+// email. Same contract as verify-google/verify-credentials -- looks up or creates the linked
+// user and returns identity info; the caller establishes the session afterward.
+app.post('/internal/auth/verify-auth0-email', { preHandler: requireInternalKey }, async (request, reply) => {
+  const parsed = auth0EmailVerifyInputSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+  }
+
+  const result = await options.repository.verifyOrCreateAuth0User({ email: parsed.data.email });
+  console.log('auth0 login verified', { userId: result.userId, role: result.role });
+  return reply.code(200).send({
+    userId: result.userId,
+    username: result.username,
+    role: result.role,
+  });
+});
+
 }
+
+
