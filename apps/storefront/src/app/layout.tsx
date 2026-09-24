@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const localSession = await getSession();
   const authSession = await auth0.getSession();
-  const { STAFF_CONSOLE_URL } = loadConfig();
+  const { APP_BASE_URL, STAFF_CONSOLE_URL } = loadConfig();
 
   const signedInName =
     authSession?.user?.email ??
@@ -49,7 +49,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {signedInName ? (
               <span className="session-form">
                 <span className="muted">Signed in as {signedInName}</span>
-                <a href={authSession ? '/auth/logout' : '/logout'}>Log out</a>
+                <a
+                  href={
+                    authSession
+                      ? `/auth/logout?returnTo=${encodeURIComponent(new URL('/signed-out', APP_BASE_URL).toString())}`
+                      : '/logout'
+                  }
+                >
+                  Log out
+                </a>
                 <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
               </span>
             ) : (
