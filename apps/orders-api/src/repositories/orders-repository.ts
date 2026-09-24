@@ -7,6 +7,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
   type ServiceType,
+  type UploadMethod,
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
@@ -74,6 +75,8 @@ export interface RegisterUploadedFileParams {
   objectKey: string;
   originalFilename: string;
   sizeBytes: number;
+  /** How the bytes arrived. Defaults to the column default ('sftp') when omitted. */
+  uploadedVia?: UploadMethod;
 }
 
 export interface RegisterUploadedFileResult {
@@ -342,6 +345,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           objectKey: params.objectKey,
           originalFilename: params.originalFilename,
           sizeBytes: params.sizeBytes,
+          ...(params.uploadedVia ? { uploadedVia: params.uploadedVia } : {}),
         });
         await tx.insert(orderEvents).values({
           orderId: params.orderId,
@@ -354,16 +358,18 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           },
         });
 
-        // Flips files_pending -> files_received -- a no-op (file recorded, status untouched)
-        // for any other current status, e.g. a second file on an already-files_received order.
+        // The first file advances the order to files_received, from either state that can get
+        // there: `submitted` (a web upload right after ordering) or `files_pending`. A no-op
+        // (file recorded, status untouched) from anywhere else, e.g. a second file on an
+        // already-files_received order.
         let statusChanged = false;
-        if (order.status === 'files_pending' && isValidStatusTransition('files_pending', 'files_received')) {
+        if (isValidStatusTransition(order.status, 'files_received')) {
           await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
             actor: 'system',
-            payloadJson: { from: 'files_pending', to: 'files_received' },
+            payloadJson: { from: order.status, to: 'files_received' },
           });
           statusChanged = true;
         }

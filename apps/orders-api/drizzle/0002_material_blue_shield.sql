@@ -1,0 +1,1 @@
+ALTER TABLE `order_files` MODIFY COLUMN `uploaded_via` enum('sftp','web') NOT NULL DEFAULT 'sftp';

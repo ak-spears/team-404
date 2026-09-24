@@ -1,7 +1,9 @@
+import multipart from '@fastify/multipart';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
+import { MAX_UPLOAD_BYTES } from './lib/storage.js';
 import { registerInternalAuthDecorator } from './plugins/internal-auth.js';
 import { createOrdersRepository, type OrdersRepository } from './repositories/orders-repository.js';
 import { registerHealthRoute } from './routes/health.js';
@@ -22,6 +24,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const app = Fastify({ logger: false });
 
   registerInternalAuthDecorator(app);
+
+  // Customer file uploads (POST /api/orders/:id/files) arrive as multipart. One file per
+  // request, size-capped on the stream so an oversized upload is cut off mid-flight rather
+  // than buffered whole and rejected afterwards.
+  app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } });
 
   // No raw SQL/error detail ever reaches a client response. Validation errors and other
   // deliberate <500s pass through as-is; everything else is logged and collapsed to a generic
