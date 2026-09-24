@@ -204,8 +204,22 @@ a:hover {
 }
 
 .session-form button {
-  padding: 0.45rem 0.85rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  padding: 0.45rem 0.75rem;
   font-size: 0.86rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  box-shadow: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.session-form button:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  background: var(--hover-bg);
+  box-shadow: none;
 }
 
 /* -------------------- Layout -------------------- */
