@@ -113,7 +113,7 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
     }
 
-    const result = await options.repository.verifyUserCredentials(parsed.data.username, parsed.data.password);
+     const result = await options.repository.verifyUserCredentials(parsed.data.username, parsed.data.password, parsed.data.cwid);
     if (!result.valid) {
       // Never log the password -- just enough to see rejected-login volume/patterns.
       console.error('login rejected', { username: parsed.data.username });

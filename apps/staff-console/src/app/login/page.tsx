@@ -1,4 +1,3 @@
-
 import { isAllowedLoginUsername } from "@crimson-copies/shared";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -18,11 +17,6 @@ interface LoginResponseBody {
   role: "customer" | "staff";
 }
 
-// The post-login destination arrives from the query string, so it is attacker-controlled.
-// Only a same-site, path-only destination is ever allowed: resolve it against a throwaway
-// origin and require the origin to survive unchanged. That rejects "https://evil.example.com",
-// the protocol-relative "//evil.example.com", the backslash form "/\\evil.example.com" and
-// tab/newline-smuggled variants, all of which browsers resolve off-site.
 const NEXT_FALLBACK = "/";
 
 function safeNextPath(raw: unknown): string {
@@ -54,20 +48,18 @@ async function login(formData: FormData): Promise<void> {
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const cwid = String(formData.get("cwid") ?? "").trim();
 
-  if (!username || !password || !isAllowedLoginUsername(username)) {
+  if (!username || !password || !cwid || !isAllowedLoginUsername(username)) {
     redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
   }
 
   const result = await callOrdersApi<LoginResponseBody>({
     method: "POST",
     path: "/internal/auth/verify-credentials",
-    body: { username, password },
+    body: { username, password, cwid },
   });
 
-  // Same generic error whether the credentials were wrong or they belong to a non-staff
-  // account -- doesn't hint at which, so a customer account can't be used to probe for staff
-  // usernames.
   if (result.status !== 200 || result.body.role !== "staff") {
     redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
   }
@@ -98,12 +90,16 @@ export default async function LoginPage({ searchParams }: PageProps) {
   return (
     <>
       <h1>Staff sign in</h1>
-      {error && <p className="error">Invalid username or password.</p>}
+      {error && <p className="error">Invalid username, password, or CWID.</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />
         <label>
           Username
           <input type="text" name="username" required autoComplete="username" />
+        </label>
+        <label>
+          CWID
+          <input type="text" name="cwid" required autoComplete="off" />
         </label>
         <label>
           Password

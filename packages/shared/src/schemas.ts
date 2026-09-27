@@ -98,9 +98,15 @@ export const uploadCredentialsVerifyInputSchema = z.object({
 export type UploadCredentialsVerifyInput = z.infer<typeof uploadCredentialsVerifyInputSchema>;
 
 /** Body of `POST /internal/auth/verify-credentials` (web BFFs -> orders-api). */
+/*export const userCredentialsVerifyInputSchema = z.object({
+  username: z.string().trim().min(1).max(64),
+  password: z.string().min(1),
+});*/
+/** Body of `POST /internal/auth/verify-credentials` (web BFFs -> orders-api). */
 export const userCredentialsVerifyInputSchema = z.object({
   username: z.string().trim().min(1).max(64),
   password: z.string().min(1),
+  cwid: z.string().trim().min(1).max(20),
 });
 export type UserCredentialsVerifyInput = z.infer<typeof userCredentialsVerifyInputSchema>;
 

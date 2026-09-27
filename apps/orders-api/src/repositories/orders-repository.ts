@@ -122,7 +122,8 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
-  verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+  //verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+  verifyUserCredentials(username: string, password: string, cwid: string): Promise<VerifyUserCredentialsResult>;
   /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
   verifyOrCreateGoogleUser(input: {
     googleId: string;
@@ -406,7 +407,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
       return { valid: true, orderId: credential.orderId };
     },
-
+/*
     async verifyUserCredentials(username, password) { //Google auth version
       const normalizedUsername = username.trim().toLowerCase();
       const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
@@ -416,6 +417,22 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
       const passwordMatches = await bcrypt.compare(password, user.passwordHash);
       if (!passwordMatches) return { valid: false };
+
+      return { valid: true, userId: user.id, username: user.username, role: user.role };
+    },*/
+      async verifyUserCredentials(username, password, cwid) {
+      const normalizedUsername = username.trim().toLowerCase();
+      const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
+      if (!user) return { valid: false };
+
+      if (!user.passwordHash) return { valid: false };
+
+      const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordMatches) return { valid: false };
+
+      // Staff must also enter their CWID -- an extra factor since staff credentials are
+      // shared/demo-style rather than per-person.
+      if (user.cwid !== cwid) return { valid: false };
 
       return { valid: true, userId: user.id, username: user.username, role: user.role };
     },
