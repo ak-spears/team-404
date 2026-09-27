@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { createDb } from './client';
-import { users, customers, orders } from './schema';
-import { loadConfig } from '../config';
+import { createDb } from './client.js';
+import { users, customers, orders } from './schema.js';
+import { loadConfig } from '../config.js';
 
 const { db, pool } = createDb(loadConfig().DATABASE_URL);
 
