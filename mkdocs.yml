@@ -10,6 +10,7 @@ site_description: "A UA-MIS capstone VM project."
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - File storage deploy: file-storage-deploy.md
   - Manual deploy: manual-deploy.md
   - Manual secrets: manual-secrets.md
 

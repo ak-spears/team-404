@@ -81,6 +81,25 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
     },
   );
 
+  /**
+   * Non-consuming check of an order's upload credential, for the storefront BFF: it decides
+   * whether an anonymous caller may be given download links for an order's files. The
+   * /verify route below CONSUMES the credential (single-use, for the SFTP login), which is
+   * why this is separate -- reading a file list must not spend it.
+   */
+  app.post('/internal/upload-credentials/check', { preHandler: requireInternalKey }, async (request, reply) => {
+    const parsed = uploadCredentialsVerifyInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    const result = await options.repository.checkUploadCredential(parsed.data.username, parsed.data.password);
+    if (!result.valid) {
+      return reply.code(200).send({ valid: false });
+    }
+    return reply.code(200).send({ valid: true, orderId: result.orderId });
+  });
+
   app.post(
     '/internal/upload-credentials/verify',
     { preHandler: requireInternalKey },

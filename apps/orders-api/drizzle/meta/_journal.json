@@ -15,6 +15,20 @@
       "when": 1788727588973,
       "tag": "0001_soft_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790274170201,
+      "tag": "0002_material_blue_shield",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790276435894,
+      "tag": "0003_add_users_cwid",
+      "breakpoints": true
     }
   ]
 }

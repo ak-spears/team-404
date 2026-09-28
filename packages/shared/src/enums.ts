@@ -30,7 +30,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_EVENT_ACTORS = ['system', 'staff', 'customer'] as const;
 export type OrderEventActor = (typeof ORDER_EVENT_ACTORS)[number];
 
-export const UPLOAD_METHODS = ['sftp'] as const;
+// 'web' is a browser upload through orders-api; 'sftp' predates it and is kept for the rows
+// the (never-built) file-intake service would have written.
+export const UPLOAD_METHODS = ['sftp', 'web'] as const;
 export type UploadMethod = (typeof UPLOAD_METHODS)[number];
 
 export const USER_ROLES = ['customer', 'staff'] as const;

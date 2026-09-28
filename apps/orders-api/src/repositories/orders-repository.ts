@@ -7,6 +7,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
   type ServiceType,
+  type UploadMethod,
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
@@ -74,6 +75,8 @@ export interface RegisterUploadedFileParams {
   objectKey: string;
   originalFilename: string;
   sizeBytes: number;
+  /** How the bytes arrived. Defaults to the column default ('sftp') when omitted. */
+  uploadedVia?: UploadMethod;
 }
 
 export interface RegisterUploadedFileResult {
@@ -122,6 +125,13 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
+  /**
+   * Non-consuming variant of the above, for the web upload path: it proves the caller holds
+   * the credential this order was created with, without burning it -- one order normally has
+   * several files, and the single-use rule exists for the SFTP login, not for authorizing an
+   * upload. Expiry still applies.
+   */
+  checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
 
   /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
@@ -352,6 +362,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           objectKey: params.objectKey,
           originalFilename: params.originalFilename,
           sizeBytes: params.sizeBytes,
+          ...(params.uploadedVia ? { uploadedVia: params.uploadedVia } : {}),
         });
         await tx.insert(orderEvents).values({
           orderId: params.orderId,
@@ -364,16 +375,18 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           },
         });
 
-        // Flips files_pending -> files_received -- a no-op (file recorded, status untouched)
-        // for any other current status, e.g. a second file on an already-files_received order.
+        // The first file advances the order to files_received, from either state that can get
+        // there: `submitted` (a web upload right after ordering) or `files_pending`. A no-op
+        // (file recorded, status untouched) from anywhere else, e.g. a second file on an
+        // already-files_received order.
         let statusChanged = false;
-        if (order.status === 'files_pending' && isValidStatusTransition('files_pending', 'files_received')) {
+        if (isValidStatusTransition(order.status, 'files_received')) {
           await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
             actor: 'system',
-            payloadJson: { from: 'files_pending', to: 'files_received' },
+            payloadJson: { from: order.status, to: 'files_received' },
           });
           statusChanged = true;
         }
@@ -385,6 +398,22 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const order = await getOrderById(params.orderId);
       if (!order) return null;
       return { order, statusChanged: res };
+    },
+
+    async checkUploadCredential(username, password) {
+      const [credential] = await db
+        .select()
+        .from(orderUploadCredentials)
+        .where(eq(orderUploadCredentials.username, username))
+        .limit(1);
+
+      if (!credential || credential.expiresAt.getTime() < Date.now()) {
+        return { valid: false };
+      }
+      if (!(await bcrypt.compare(password, credential.passwordHash))) {
+        return { valid: false };
+      }
+      return { valid: true, orderId: credential.orderId };
     },
 
     async verifyUploadCredential(username, password) {
