@@ -12,8 +12,11 @@ interface OrderFile {
   originalFilename: string;
   sizeBytes: number;
   uploadedAt: string;
-  /** Presigned, 15-minute MinIO link -- lets the customer open what they uploaded. */
-  url: string;
+  /**
+   * Presigned, 15-minute MinIO link. Absent when this viewer isn't entitled to the bytes --
+   * an anonymous visitor reading an order by id sees the list, but no links.
+   */
+  url?: string;
 }
 
 export function formatBytes(bytes: number): string {
@@ -47,13 +50,17 @@ export function OrderFileUpload({ orderId, reloadKey = 0, uploadToken }: OrderFi
 
   const loadFiles = useCallback(async () => {
     try {
-      const response = await fetch(`/api/orders/${orderId}/files`);
+      const response = await fetch(`/api/orders/${orderId}/files`, {
+        // Proves to the BFF that this order is ours when there is no session to prove it --
+        // without it the list comes back without download links.
+        headers: uploadToken ? { 'X-Upload-Token': uploadToken } : undefined,
+      });
       const body: unknown = await response.json();
       setFiles(response.ok && isOrderFiles(body) ? body.files : []);
     } catch {
       setFiles([]);
     }
-  }, [orderId]);
+  }, [orderId, uploadToken]);
 
   useEffect(() => {
     void loadFiles();
@@ -99,9 +106,13 @@ export function OrderFileUpload({ orderId, reloadKey = 0, uploadToken }: OrderFi
         <ul className="files-list">
           {files.map((file) => (
             <li key={`${file.originalFilename}-${file.uploadedAt}`}>
-              <a href={file.url} target="_blank" rel="noreferrer">
-                {file.originalFilename}
-              </a>{' '}
+              {file.url ? (
+                <a href={file.url} target="_blank" rel="noreferrer">
+                  {file.originalFilename}
+                </a>
+              ) : (
+                file.originalFilename
+              )}{' '}
               <span className="muted">
                 ({formatBytes(file.sizeBytes)}, uploaded {new Date(file.uploadedAt).toLocaleString()})
               </span>

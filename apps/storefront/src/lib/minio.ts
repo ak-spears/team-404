@@ -29,6 +29,24 @@ function publicEndpoint(config: Config): { endPoint: string; port: number; useSS
   };
 }
 
+/**
+ * Formats that execute script when a browser renders them inline. MinIO is served from the
+ * site's own hostname (Caddy proxies /<bucket>/*), so an inline SVG runs its JavaScript on
+ * THIS origin, with access to the cookies for it -- stored XSS by way of print artwork.
+ * Forcing a download keeps the format usable without letting it execute. `nosniff` does not
+ * help here: the content type is genuinely image/svg+xml.
+ */
+const NEVER_INLINE_EXTENSIONS = new Set(['svg', 'htm', 'html', 'xhtml', 'xml']);
+
+function contentDisposition(originalFilename: string): string {
+  const dot = originalFilename.lastIndexOf('.');
+  const extension = dot === -1 ? '' : originalFilename.slice(dot + 1).toLowerCase();
+  const mode = NEVER_INLINE_EXTENSIONS.has(extension) ? 'attachment' : 'inline';
+  // orders-api already reduced the stored name to [A-Za-z0-9._-], so it is safe unquoted-ish
+  // here; quoting it anyway keeps the header well-formed.
+  return `${mode}; filename="${originalFilename}"`;
+}
+
 function getClient(): Client {
   if (cachedClient) return cachedClient;
   const config = loadConfig();
@@ -46,7 +64,11 @@ function getClient(): Client {
  * and no proxying of bytes through Node. Deliberately duplicated rather than shared -- the two
  * apps hold DIFFERENT credentials, and a shared module would invite one set to serve both.
  */
-export async function presignFileUrl(objectKey: string): Promise<string> {
+export async function presignFileUrl(objectKey: string, originalFilename: string): Promise<string> {
   const config = loadConfig();
-  return getClient().presignedGetObject(config.MINIO_BUCKET, objectKey, PRESIGN_EXPIRY_SECONDS);
+  // The signed response headers also restore the ORIGINAL filename: the object key carries a
+  // uuid prefix, which is not what anyone wants their download called.
+  return getClient().presignedGetObject(config.MINIO_BUCKET, objectKey, PRESIGN_EXPIRY_SECONDS, {
+    'response-content-disposition': contentDisposition(originalFilename),
+  });
 }

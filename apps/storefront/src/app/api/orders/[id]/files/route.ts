@@ -16,7 +16,7 @@ interface RouteParams {
 }
 
 /** BFF for `GET /api/orders/:id/files` -- what the customer has uploaded so far. */
-export async function GET(_request: Request, { params }: RouteParams): Promise<NextResponse> {
+export async function GET(request: Request, { params }: RouteParams): Promise<NextResponse> {
   console.log('GET /api/orders/:id/files: request received');
 
   const { id } = await params;
@@ -33,19 +33,38 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
     return NextResponse.json(result.body, { status: result.status });
   }
 
-  // The object key stays server-side; what the browser gets is a presigned URL, so the
-  // customer can open the file and check they sent the right version. It expires in 15
-  // minutes, and orders-api has already established this caller may see this order.
+  // A download link is handed out only to a caller entitled to the BYTES, which is a higher
+  // bar than reading the list: orders-api lets an unidentified caller read any order (the
+  // guest-checkout rule), and order ids are sequential, so presigning for everyone would let
+  // anyone enumerate ids and collect strangers' files. A session proves ownership (orders-api
+  // 403s a customer reading someone else's order); a guest proves it with the credential
+  // their order was created with. Everyone else still sees the file list, without links.
+  let mayDownload = session !== null;
+  const uploadToken = request.headers.get('x-upload-token');
+  if (!mayDownload && uploadToken) {
+    const check = await callOrdersApi<{ valid: boolean; orderId?: number }>({
+      method: 'POST',
+      path: '/internal/upload-credentials/check',
+      body: { username: id, password: uploadToken },
+    });
+    mayDownload = check.status === 200 && check.body?.valid === true;
+  }
+
+  // The object key never leaves the server either way.
   const files = await Promise.all(
     result.body.map(async (file) => ({
       originalFilename: file.originalFilename,
       sizeBytes: file.sizeBytes,
       uploadedAt: file.uploadedAt,
-      url: await presignFileUrl(file.objectKey),
+      url: mayDownload ? await presignFileUrl(file.objectKey, file.originalFilename) : undefined,
     })),
   );
 
-  console.log('GET /api/orders/:id/files: request completed', { orderId: id, fileCount: files.length });
+  console.log('GET /api/orders/:id/files: request completed', {
+    orderId: id,
+    fileCount: files.length,
+    withLinks: mayDownload,
+  });
   return NextResponse.json({ files }, { status: 200 });
 }
 
