@@ -20,6 +20,26 @@ const envSchema = z.object({
   AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required').optional(),
   AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required').optional(),
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
+  // Read-only MinIO access, used ONLY to presign short-lived download links so a customer can
+  // open the file they uploaded and check they sent the right one. The storefront never writes
+  // to storage -- orders-api does. MINIO_PUBLIC_* is the staff/customer BROWSER's view of
+  // MinIO: SigV4 signs the Host header, so the link must be signed for the public host from
+  // the start (see apps/staff-console/src/lib/minio.ts, same arrangement).
+  MINIO_ENDPOINT: z.string().default('localhost'),
+  MINIO_PORT: z.coerce.number().int().default(9000),
+  MINIO_USE_SSL: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  MINIO_ACCESS_KEY: z.string().default('minioadmin'),
+  MINIO_SECRET_KEY: z.string().default('minioadmin'),
+  MINIO_BUCKET: z.string().default('order-files'),
+  MINIO_PUBLIC_ENDPOINT: z.string().optional(),
+  MINIO_PUBLIC_PORT: z.coerce.number().int().optional(),
+  MINIO_PUBLIC_USE_SSL: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
   // Where the storefront's "Staff sign in" link points.
   STAFF_CONSOLE_URL: z.string().default(DEFAULT_STAFF_CONSOLE_URL),
 });

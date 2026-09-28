@@ -100,7 +100,12 @@ export function OrderForm() {
       // someone unsure whether they had ordered anything at all.
       if (pendingFile) {
         setUploadPercent(0);
-        const outcome = await uploadOrderFile(body.orderId, pendingFile, setUploadPercent);
+        const outcome = await uploadOrderFile(
+          body.orderId,
+          pendingFile,
+          setUploadPercent,
+          body.uploadInstructions.password,
+        );
         setUploadPercent(null);
         if (outcome.ok) {
           setReloadKey((key) => key + 1);
@@ -135,7 +140,11 @@ export function OrderForm() {
             the order itself is fine.
           </p>
         )}
-        <OrderFileUpload orderId={res.orderId} reloadKey={reloadKey} />
+        <OrderFileUpload
+          orderId={res.orderId}
+          reloadKey={reloadKey}
+          uploadToken={res.uploadInstructions.password}
+        />
       </div>
     );
   }

@@ -128,6 +128,9 @@ importers:
       '@crimson-copies/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      minio:
+        specifier: ^8.0.7
+        version: 8.0.7
       next:
         specifier: 15.5.23
         version: 15.5.23(@opentelemetry/api@1.9.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

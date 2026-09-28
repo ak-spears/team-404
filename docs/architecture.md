@@ -254,10 +254,17 @@ How it holds together:
   50MB, enforced on the incoming stream rather than after buffering.
 - **The first file advances the order to `files_received`** and triggers the one notify call.
   Subsequent files are recorded without repeating it.
+- **Uploads require identity, not just an order id.** A caller must be staff, the customer the
+  order belongs to, or hold the one-time upload credential minted when the order was placed —
+  which is how a guest, who has no session, proves the order is theirs. Reads still treat an
+  unidentified caller as a guest and allow any order id; that is a pre-existing choice of the
+  guest-checkout flow, and a hole worth closing separately.
 - **Downloads are presigned, not proxied.** staff-console signs a 15-minute GET against the
   *public* hostname, because SigV4 covers the `Host` header — a link signed for `127.0.0.1`
   cannot be rewritten afterwards. Caddy forwards `/order-files/*` to MinIO unchanged. The
   bucket has no anonymous read policy, so an unsigned or tampered URL gets a 403 from MinIO.
+  The storefront presigns the same way, so a customer can open what they uploaded; each app
+  holds its own read-only account.
 
 Still unfinished here:
 

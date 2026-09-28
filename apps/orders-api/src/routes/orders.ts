@@ -286,8 +286,27 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
         return reply.code(404).send({ error: 'not_found' });
       }
 
+      // Uploads are NOT governed by isForbiddenForCustomer, which treats an unidentified
+      // caller as a guest and lets it through. That is tolerable for reads; for writes it
+      // would let anyone with a guessable (sequential) order id attach files to a stranger's
+      // order, or fill the disk. A caller must therefore be staff, the customer the order
+      // belongs to, or hold the upload credential minted when the order was placed -- which
+      // is how a guest, who has no session at all, proves the order is theirs.
       const { role, id: userId } = request.internalUser;
-      if (isForbiddenForCustomer(role, userId, order.userId)) {
+      const isOwningCustomer =
+        role === 'customer' && userId !== undefined && order.userId !== null && Number(userId) === order.userId;
+      let authorized = role === 'staff' || isOwningCustomer;
+
+      if (!authorized) {
+        const uploadToken = request.headers['x-upload-token'];
+        if (typeof uploadToken === 'string' && uploadToken.length > 0) {
+          const credential = await options.repository.checkUploadCredential(String(id), uploadToken);
+          authorized = credential.valid && credential.orderId === id;
+        }
+      }
+
+      if (!authorized) {
+        console.error('file upload rejected', { orderId: id, role: role ?? 'anonymous' });
         return reply.code(403).send({ error: 'forbidden' });
       }
 

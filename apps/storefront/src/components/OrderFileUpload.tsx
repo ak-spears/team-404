@@ -12,6 +12,8 @@ interface OrderFile {
   originalFilename: string;
   sizeBytes: number;
   uploadedAt: string;
+  /** Presigned, 15-minute MinIO link -- lets the customer open what they uploaded. */
+  url: string;
 }
 
 export function formatBytes(bytes: number): string {
@@ -28,6 +30,8 @@ interface OrderFileUploadProps {
   orderId: number;
   /** Bump to re-read the file list -- the order form uses it after its own upload finishes. */
   reloadKey?: number;
+  /** Guest checkout's proof of ownership; omitted for a signed-in customer. */
+  uploadToken?: string;
 }
 
 /**
@@ -35,7 +39,7 @@ interface OrderFileUploadProps {
  * failed during checkout. Posts to the storefront's own BFF route, which forwards to
  * orders-api -- the browser never touches MinIO.
  */
-export function OrderFileUpload({ orderId, reloadKey = 0 }: OrderFileUploadProps) {
+export function OrderFileUpload({ orderId, reloadKey = 0, uploadToken }: OrderFileUploadProps) {
   const [files, setFiles] = useState<OrderFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [percent, setPercent] = useState<number | null>(null);
@@ -70,7 +74,7 @@ export function OrderFileUpload({ orderId, reloadKey = 0 }: OrderFileUploadProps
     }
 
     setPercent(0);
-    const outcome = await uploadOrderFile(orderId, file, setPercent);
+    const outcome = await uploadOrderFile(orderId, file, setPercent, uploadToken);
     setPercent(null);
     if (inputRef.current) inputRef.current.value = '';
 
@@ -95,7 +99,9 @@ export function OrderFileUpload({ orderId, reloadKey = 0 }: OrderFileUploadProps
         <ul className="files-list">
           {files.map((file) => (
             <li key={`${file.originalFilename}-${file.uploadedAt}`}>
-              {file.originalFilename}{' '}
+              <a href={file.url} target="_blank" rel="noreferrer">
+                {file.originalFilename}
+              </a>{' '}
               <span className="muted">
                 ({formatBytes(file.sizeBytes)}, uploaded {new Date(file.uploadedAt).toLocaleString()})
               </span>

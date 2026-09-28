@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { loadConfig } from '../../../../../lib/config';
 import { callOrdersApi } from '../../../../../lib/internal-api';
+import { presignFileUrl } from '../../../../../lib/minio';
 import { getSession } from '../../../../../lib/session';
 
 interface OrderFileRecord {
+  objectKey: string;
   originalFilename: string;
   sizeBytes: number;
   uploadedAt: string;
@@ -31,12 +33,17 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
     return NextResponse.json(result.body, { status: result.status });
   }
 
-  // The object key stays server-side: the customer's own list needs only the human details.
-  const files = result.body.map((file) => ({
-    originalFilename: file.originalFilename,
-    sizeBytes: file.sizeBytes,
-    uploadedAt: file.uploadedAt,
-  }));
+  // The object key stays server-side; what the browser gets is a presigned URL, so the
+  // customer can open the file and check they sent the right version. It expires in 15
+  // minutes, and orders-api has already established this caller may see this order.
+  const files = await Promise.all(
+    result.body.map(async (file) => ({
+      originalFilename: file.originalFilename,
+      sizeBytes: file.sizeBytes,
+      uploadedAt: file.uploadedAt,
+      url: await presignFileUrl(file.objectKey),
+    })),
+  );
 
   console.log('GET /api/orders/:id/files: request completed', { orderId: id, fileCount: files.length });
   return NextResponse.json({ files }, { status: 200 });
@@ -67,6 +74,13 @@ export async function POST(request: Request, { params }: RouteParams): Promise<N
   if (session) {
     headers['X-User-Role'] = session.role;
     headers['X-User-Id'] = String(session.userId);
+  }
+  // A guest has no session, so the only thing that proves this order is theirs is the upload
+  // credential returned once when they placed it (see orders-api's upload route). Forwarded
+  // as-is; the storefront never inspects or stores it.
+  const uploadToken = request.headers.get('x-upload-token');
+  if (uploadToken) {
+    headers['X-Upload-Token'] = uploadToken;
   }
 
   let status: number;

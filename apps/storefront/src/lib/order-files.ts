@@ -19,7 +19,7 @@ export function uploadErrorMessage(status: number): string {
     case 0:
       return 'Network error -- please try again.';
     case 403:
-      return "This order isn't associated with your account.";
+      return "This order isn't associated with your account -- sign in with the account that placed it.";
     case 404:
       return 'That order no longer exists.';
     case 413:
@@ -51,6 +51,12 @@ export function uploadOrderFile(
   orderId: number,
   file: File,
   onProgress: (percent: number) => void,
+  /**
+   * The one-time credential returned when the order was placed. A signed-in customer doesn't
+   * need it -- their session identifies them -- but a guest has nothing else to prove the
+   * order is theirs, and orders-api refuses anonymous uploads without it.
+   */
+  uploadToken?: string,
 ): Promise<UploadOutcome> {
   return new Promise((resolve) => {
     const body = new FormData();
@@ -58,6 +64,7 @@ export function uploadOrderFile(
 
     const request = new XMLHttpRequest();
     request.open('POST', `/api/orders/${orderId}/files`);
+    if (uploadToken) request.setRequestHeader('X-Upload-Token', uploadToken);
     request.upload.addEventListener('progress', (progress) => {
       if (progress.lengthComputable) {
         onProgress(Math.round((progress.loaded / progress.total) * 100));

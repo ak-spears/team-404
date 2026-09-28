@@ -125,6 +125,13 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
+  /**
+   * Non-consuming variant of the above, for the web upload path: it proves the caller holds
+   * the credential this order was created with, without burning it -- one order normally has
+   * several files, and the single-use rule exists for the SFTP login, not for authorizing an
+   * upload. Expiry still applies.
+   */
+  checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
   /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
   verifyOrCreateGoogleUser(input: {
@@ -381,6 +388,22 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const order = await getOrderById(params.orderId);
       if (!order) return null;
       return { order, statusChanged: res };
+    },
+
+    async checkUploadCredential(username, password) {
+      const [credential] = await db
+        .select()
+        .from(orderUploadCredentials)
+        .where(eq(orderUploadCredentials.username, username))
+        .limit(1);
+
+      if (!credential || credential.expiresAt.getTime() < Date.now()) {
+        return { valid: false };
+      }
+      if (!(await bcrypt.compare(password, credential.passwordHash))) {
+        return { valid: false };
+      }
+      return { valid: true, orderId: credential.orderId };
     },
 
     async verifyUploadCredential(username, password) {
