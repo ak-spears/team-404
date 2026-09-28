@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { auth0, getSessionEmail, isAllowedAuthEmail, isUnverifiedEmailSession } from './lib/auth0';
+import { auth0 } from './lib/auth0-middleware';
+import {
+  getSessionEmail,
+  isAllowedAuthEmail,
+  isUnverifiedEmailSession,
+} from './lib/auth0-helpers';
 
 // Duplicated from lib/session.ts's SESSION_COOKIE_NAME rather than imported -- middleware runs
 // on the Edge runtime, and lib/session.ts pulls in node:crypto (for the real signature check),

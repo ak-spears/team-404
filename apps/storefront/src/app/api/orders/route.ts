@@ -1,18 +1,61 @@
 import { NextResponse } from 'next/server';
+
 import { orderCreateInputSchema } from '@crimson-copies/shared';
+
 import { callOrdersApi } from '../../../lib/internal-api';
+import { auth0 } from '../../../lib/auth0';
 import { getSession } from '../../../lib/session';
 
-/**
- * BFF for `POST /api/orders`. Forwards the signed-in customer's identity when one exists;
- * otherwise this is a guest order -- the browser never talks to orders-api directly, and never
- * sees `INTERNAL_API_KEY` either way.
- */
+async function getAuthenticatedUser() {
+  const localSession = await getSession();
+
+  if (localSession) {
+    return {
+      userId: String(localSession.userId),
+      role: localSession.role,
+    };
+  }
+
+  const authSession = await auth0.getSession();
+  const email = authSession?.user?.email;
+
+  if (!email) {
+    return {
+      userId: undefined,
+      role: undefined,
+    };
+  }
+
+  const result = await callOrdersApi<{
+    userId: number;
+    username: string;
+    role: 'customer' | 'staff';
+  }>({
+    method: 'POST',
+    path: '/internal/auth/verify-auth0-email',
+    body: { email },
+  });
+
+  if (result.status !== 200) {
+    console.error('Auth0 user verification failed:', result);
+    return {
+      userId: undefined,
+      role: undefined,
+    };
+  }
+
+  return {
+    userId: String(result.body.userId),
+    role: result.body.role,
+  };
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   console.log('POST /api/orders: request received');
 
   const json = await request.json().catch(() => undefined);
   const parsed = orderCreateInputSchema.safeParse(json);
+
   if (!parsed.success) {
     console.error('POST /api/orders: validation failed', parsed.error.issues);
     return NextResponse.json(
@@ -21,38 +64,41 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const session = await getSession();
+  const user = await getAuthenticatedUser();
+
   const result = await callOrdersApi({
     method: 'POST',
     path: '/api/orders',
-    role: session?.role,
-    userId: session ? String(session.userId) : undefined,
+    role: user.role,
+    userId: user.userId,
     body: parsed.data,
   });
 
-  const responseStatus = result.status;
-  console.log('POST /api/orders: request completed', { status: responseStatus });
-  return NextResponse.json(result.body, { status: responseStatus });
+  console.log('POST /api/orders: request completed', {
+    status: result.status,
+    userId: user.userId,
+  });
+
+  return NextResponse.json(result.body, { status: result.status });
 }
 
-/**
- * BFF for `GET /api/orders?mine=true` (the storefront's own "my orders" list). Without a
- * signed-in session this always renders empty -- see orders-api's `mine`-filter logic, which
- * treats an anonymous caller's "mine" request as an empty list rather than an error.
- */
 export async function GET(): Promise<NextResponse> {
   console.log('GET /api/orders: request received');
 
-  const session = await getSession();
+  const user = await getAuthenticatedUser();
+
   const result = await callOrdersApi({
     method: 'GET',
     path: '/api/orders',
-    role: session?.role,
-    userId: session ? String(session.userId) : undefined,
+    role: user.role,
+    userId: user.userId,
     searchParams: { mine: 'true' },
   });
 
-  const responseStatus = result.status;
-  console.log('GET /api/orders: request completed', { status: responseStatus });
-  return NextResponse.json(result.body, { status: responseStatus });
+  console.log('GET /api/orders: request completed', {
+    status: result.status,
+    userId: user.userId,
+  });
+
+  return NextResponse.json(result.body, { status: result.status });
 }
