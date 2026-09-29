@@ -35,9 +35,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             Crimson Copies -- Staff
           </Link>
           <nav>
-            {/* Queue is the staff "home"; Home leaves for the main Crimson Copies site. */}
+            {/* Queue is the staff "home". */}
             <Link href="/">Queue</Link>
-            <a href={STOREFRONT_URL}>Home</a>
+            <Link href="/my-workload">My Workload</Link>
           </nav>
           <div className="header-actions">
             <ThemeToggle />
