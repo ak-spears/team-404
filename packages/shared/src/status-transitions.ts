@@ -5,7 +5,9 @@ import type { OrderStatus } from './enums.js';
  * `cancelled` are terminal.
  */
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  submitted: ['files_pending', 'cancelled'],
+  // files_received is reachable directly: orders are created as `submitted`, so a customer
+  // who uploads right after ordering never passes through files_pending.
+  submitted: ['files_pending', 'files_received', 'cancelled'],
   files_pending: ['files_received', 'cancelled'],
   files_received: ['in_production', 'cancelled'],
   in_production: ['ready_for_pickup', 'cancelled'],

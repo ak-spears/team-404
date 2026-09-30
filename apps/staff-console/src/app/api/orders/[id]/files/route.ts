@@ -61,7 +61,7 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
       originalFilename: file.originalFilename,
       sizeBytes: file.sizeBytes,
       uploadedAt: file.uploadedAt,
-      url: await presignFileUrl(file.objectKey),
+      url: await presignFileUrl(file.objectKey, file.originalFilename),
     })),
   );
 

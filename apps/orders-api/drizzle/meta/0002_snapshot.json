@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "b63ba12d-ba3b-4ae1-88b7-86a665fda72b",
-  "prevId": "d65107e3-f284-4709-ab0a-cd4277e2f8d2",
+  "id": "209ec356-b50d-4421-805d-889093353779",
+  "prevId": "04c8dd51-bd02-432b-b209-cdf07af37edd",
   "tables": {
     "customers": {
       "name": "customers",
@@ -279,7 +279,7 @@
         },
         "uploaded_via": {
           "name": "uploaded_via",
-          "type": "enum('sftp')",
+          "type": "enum('sftp','web')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
