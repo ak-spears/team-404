@@ -5,6 +5,7 @@ import {
   orderListQuerySchema,
   orderStatusUpdateInputSchema,
   type Order,
+  type OrderListQuery,
 } from '@crimson-copies/shared';
 import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
@@ -16,10 +17,12 @@ import {
   type OrdersRepository,
 } from '../repositories/orders-repository.js';
 
+
 function toOrderDto(record: OrderRecord): Order {
   return {
     id: record.id,
     customerId: record.customerId,
+    assignedTo: record.assignedTo,
     serviceType: record.serviceType,
     quantity: record.quantity,
     specNotes: record.specNotes,
@@ -396,35 +399,61 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
       });
     },
   );
+app.get<{ Querystring: OrderListQuery }>(
+  '/api/orders',
+  { preHandler: requireInternalKey },
+  async (request, reply) => {
 
-  app.get('/api/orders', { preHandler: requireInternalKey }, async (request, reply) => {
     const parsed = orderListQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
     }
 
-    const { role, id: userId } = request.internalUser;
-    let filterUserId: number | undefined;
-    if (parsed.data.mine) {
-      // "mine=true" without a verifiable identity can't be honored (guest orders have no stable
-      // identity to filter by) -- return an empty list rather than erroring, since an empty "my
-      // orders" view is the correct answer when no customer session exists.
-      const parsedUserId = parseUserId(userId);
-      if (role !== 'customer' || parsedUserId === undefined) {
-        return reply.code(200).send([]);
-      }
-      filterUserId = parsedUserId;
-    } else if (role !== 'staff') {
-      // The unfiltered queue is a staff-only view. Without this, any caller could omit `mine`
-      // and read every customer's orders.
-      return reply.code(403).send({ error: 'forbidden' });
-    }
+ const { role, id: userId } = request.internalUser;
 
-    const filter: { status?: typeof parsed.data.status; userId?: number } = {};
-    if (parsed.data.status) filter.status = parsed.data.status;
-    if (filterUserId !== undefined) filter.userId = filterUserId;
+let filterUserId: number | undefined;
+let filterAssignedTo: number | undefined;
 
-    const list = await options.repository.listOrders(filter);
-    return reply.code(200).send(list.map(toOrderDto));
-  });
+if (parsed.data.mine) {
+  const parsedUserId = parseUserId(userId);
+
+  if (parsedUserId === undefined) {
+    return reply.code(200).send([]);
+  }
+
+  if (role === 'customer') {
+    filterUserId = parsedUserId;
+  } else if (role === 'staff') {
+    filterAssignedTo = parsedUserId;
+  } else {
+    return reply.code(200).send([]);
+  }
+} else if (role !== 'staff') {
+  return reply.code(403).send({ error: 'forbidden' });
+}
+
+const filter: {
+  status?: typeof parsed.data.status;
+  userId?: number;
+  assignedTo?: number;
+} = {};
+
+if (parsed.data.status) {
+  filter.status = parsed.data.status;
+}
+
+if (filterUserId !== undefined) {
+  filter.userId = filterUserId;
+}
+
+if (filterAssignedTo !== undefined) {
+  filter.assignedTo = filterAssignedTo;
+}
+
+const list = await options.repository.listOrders(filter);
+
+return reply.code(200).send(list.map(toOrderDto));
+  },
+);
+
 }

@@ -44,6 +44,7 @@ CREATE TABLE `order_upload_credentials` (
 CREATE TABLE `orders` (
 	`id` bigint AUTO_INCREMENT NOT NULL,
 	`customer_id` bigint,
+	`assigned_to` bigint,
 	`service_type` enum('poster','resume_portfolio','class_assignment','department_job','personal_printing') NOT NULL,
 	`quantity` int NOT NULL DEFAULT 1,
 	`spec_notes` text,
@@ -73,3 +74,4 @@ ALTER TABLE `order_events` ADD CONSTRAINT `order_events_order_id_orders_id_fk` F
 ALTER TABLE `order_files` ADD CONSTRAINT `order_files_order_id_orders_id_fk` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `order_upload_credentials` ADD CONSTRAINT `order_upload_credentials_order_id_orders_id_fk` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `orders` ADD CONSTRAINT `orders_customer_id_customers_id_fk` FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE no action ON UPDATE no action;
+

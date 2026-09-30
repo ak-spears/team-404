@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import './globals.css';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BASE_PATH } from '../lib/base-path';
-import { loadConfig } from '../lib/config';
+//import { loadConfig } from '../lib/config';
 import { getStaffSession } from '../lib/session';
 
 const fontSans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans' });
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getStaffSession();
-  const { STOREFRONT_URL } = loadConfig();
+  //const { STOREFRONT_URL } = loadConfig();
 
   // Read the saved theme cookie server-side so the very first byte of HTML already has the
   // right data-theme attribute -- no client script race, no flash on full page navigations.
@@ -35,9 +35,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             Crimson Copies -- Staff
           </Link>
           <nav>
-            {/* Queue is the staff "home"; Home leaves for the main Crimson Copies site. */}
+            {/* Queue is the staff "home". */}
             <Link href="/">Queue</Link>
-            <a href={STOREFRONT_URL}>Home</a>
+            <Link href="/my-workload">My Workload</Link>
           </nav>
           <div className="header-actions">
             <ThemeToggle />
