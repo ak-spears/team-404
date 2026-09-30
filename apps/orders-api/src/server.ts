@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { buildApp } from './app.js';
+import { buildApp } from './app.postgres.js';
 import { loadConfig } from './config.js';
-import { createDb } from './db/client.js';
+import { createDb } from './db/client.postgres.js';
 import { ensureBucket } from './lib/storage.js';
 
 async function main(): Promise<void> {
@@ -10,8 +10,7 @@ async function main(): Promise<void> {
   const app = buildApp({ config, db, pool });
 
   // Deliberately not fatal: order placement doesn't touch MinIO, so a storage outage must not
-  // take the whole API down (systemd would then crash-loop it). The upload route surfaces its
-  // own error when storage is actually needed.
+  // take the whole API down. The upload route surfaces its own error when storage is needed.
   try {
     await ensureBucket(config);
   } catch (err) {
@@ -19,8 +18,6 @@ async function main(): Promise<void> {
   }
 
   try {
-    // orders-api is internal-only, bound to a non-public listener -- HOST defaults to
-    // 127.0.0.1 (config.ts), never the public reverse proxy.
     await app.listen({ host: config.HOST, port: config.PORT });
   } catch (err) {
     console.error(err);
