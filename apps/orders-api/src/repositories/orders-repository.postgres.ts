@@ -1,22 +1,31 @@
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
 import {
+  calculatePriceCents,
   isValidStatusTransition,
   type OrderEventActor,
   type OrderStatus,
   type PaymentMethod,
   type ServiceType,
 } from '@crimson-copies/shared';
-import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.postgres.js';
-import { customers, googleIdentities, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.postgres.js';
+import {
+  customers,
+  googleIdentities,
+  orderEvents,
+  orderFiles,
+  orders,
+  orderUploadCredentials,
+  users,
+} from '../db/schema.postgres.js';
 
 const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface OrderRecord {
   id: number;
   customerId: number | null;
+  assignedTo: number | null;
   serviceType: ServiceType;
   quantity: number;
   specNotes: string | null;
@@ -59,6 +68,7 @@ export interface CreateOrderResult {
 
 export interface ListOrdersFilter {
   status?: OrderStatus | undefined;
+  assignedTo?: number;
   userId?: number | undefined;
 }
 
@@ -112,6 +122,7 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
+  checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
   verifyOrCreateGoogleUser(input: {
     googleId: string;
@@ -121,7 +132,10 @@ export interface OrdersRepository {
   verifyOrCreateAuth0User(input: {
     email: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
-  setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
+  setUserCwid(
+    userId: number,
+    cwid: string,
+  ): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
   recordEvent(
     orderId: number,
@@ -134,6 +148,22 @@ export interface OrdersRepository {
 function generateUploadPassword(): string {
   return randomBytes(18).toString('base64url');
 }
+
+const orderColumns = {
+  id: orders.id,
+  customerId: orders.customerId,
+  assignedTo: orders.assignedTo,
+  serviceType: orders.serviceType,
+  quantity: orders.quantity,
+  specNotes: orders.specNotes,
+  paymentMethod: orders.paymentMethod,
+  priceCents: orders.priceCents,
+  status: orders.status,
+  createdAt: orders.createdAt,
+  updatedAt: orders.updatedAt,
+  pickupReadyAt: orders.pickupReadyAt,
+  completedAt: orders.completedAt,
+};
 
 export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepository {
   async function getOrderById(id: number): Promise<OrderRecord | null> {
@@ -164,12 +194,14 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
       const orderId = await db.transaction(async (tx) => {
         let customerId: number;
+
         if (params.userId) {
           const [existing] = await tx
             .select()
             .from(customers)
             .where(eq(customers.userId, params.userId))
             .limit(1);
+
           if (existing) {
             customerId = existing.id;
           } else {
@@ -252,18 +284,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     async getOrderWithCustomerById(id) {
       const [row] = await db
         .select({
-          id: orders.id,
-          customerId: orders.customerId,
-          serviceType: orders.serviceType,
-          quantity: orders.quantity,
-          specNotes: orders.specNotes,
-          paymentMethod: orders.paymentMethod,
-          priceCents: orders.priceCents,
-          status: orders.status,
-          createdAt: orders.createdAt,
-          updatedAt: orders.updatedAt,
-          pickupReadyAt: orders.pickupReadyAt,
-          completedAt: orders.completedAt,
+          ...orderColumns,
           customerName: customers.name,
           customerEmail: customers.email,
           userId: customers.userId,
@@ -276,29 +297,17 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async listOrders(filter) {
-      const conditions = [];
+      const conditions: SQL[] = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
+      if (filter.assignedTo !== undefined) conditions.push(eq(orders.assignedTo, filter.assignedTo));
 
       if (filter.userId !== undefined) {
-        const query = db
-          .select({
-            id: orders.id,
-            customerId: orders.customerId,
-            serviceType: orders.serviceType,
-            quantity: orders.quantity,
-            specNotes: orders.specNotes,
-            paymentMethod: orders.paymentMethod,
-            priceCents: orders.priceCents,
-            status: orders.status,
-            createdAt: orders.createdAt,
-            updatedAt: orders.updatedAt,
-            pickupReadyAt: orders.pickupReadyAt,
-            completedAt: orders.completedAt,
-          })
+        return db
+          .select(orderColumns)
           .from(orders)
           .innerJoin(customers, eq(orders.customerId, customers.id))
+          .where(and(eq(customers.userId, filter.userId), ...conditions))
           .orderBy(desc(orders.id));
-        return query.where(and(eq(customers.userId, filter.userId), ...conditions));
       }
 
       const query = db.select().from(orders).orderBy(desc(orders.id));
@@ -331,6 +340,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           originalFilename: params.originalFilename,
           sizeBytes: params.sizeBytes,
         });
+
         await tx.insert(orderEvents).values({
           orderId: params.orderId,
           eventType: 'file_uploaded',
@@ -342,14 +352,15 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           },
         });
 
+        // First file advances the order to files_received from `submitted` or `files_pending`.
         let statusChanged = false;
-        if (order.status === 'files_pending' && isValidStatusTransition('files_pending', 'files_received')) {
+        if (isValidStatusTransition(order.status, 'files_received')) {
           await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
             actor: 'system',
-            payloadJson: { from: 'files_pending', to: 'files_received' },
+            payloadJson: { from: order.status, to: 'files_received' },
           });
           statusChanged = true;
         }
@@ -361,6 +372,22 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const order = await getOrderById(params.orderId);
       if (!order) return null;
       return { order, statusChanged: res };
+    },
+
+    async checkUploadCredential(username, password) {
+      const [credential] = await db
+        .select()
+        .from(orderUploadCredentials)
+        .where(eq(orderUploadCredentials.username, username))
+        .limit(1);
+
+      if (!credential || credential.expiresAt.getTime() < Date.now()) {
+        return { valid: false };
+      }
+      if (!(await bcrypt.compare(password, credential.passwordHash))) {
+        return { valid: false };
+      }
+      return { valid: true, orderId: credential.orderId };
     },
 
     async verifyUploadCredential(username, password) {
@@ -384,7 +411,6 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .returning({ id: orderUploadCredentials.id });
 
       if (updateResult.length === 0) {
-        // Lost the race to another concurrent verify call for the same one-time credential.
         return { valid: false };
       }
 
@@ -394,9 +420,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     async verifyUserCredentials(username, password) {
       const normalizedUsername = username.trim().toLowerCase();
       const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
-      if (!user) return { valid: false };
-
-      if (!user.passwordHash) return { valid: false };
+      if (!user || !user.passwordHash) return { valid: false };
 
       const passwordMatches = await bcrypt.compare(password, user.passwordHash);
       if (!passwordMatches) return { valid: false };

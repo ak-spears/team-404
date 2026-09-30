@@ -56,6 +56,7 @@ export const customers = pgTable('customers', {
 
 export const orders = pgTable('orders', {
   id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
+  assignedTo: bigint('assigned_to', { mode: 'number' }),
   customerId: bigint('customer_id', { mode: 'number' }).references(() => customers.id),
   serviceType: serviceTypeEnum('service_type').notNull(),
   quantity: integer('quantity').notNull().default(1),
