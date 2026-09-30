@@ -1,8 +1,11 @@
 import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Pool } from 'pg';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { migrate } from 'drizzle-orm/neon-serverless/migrator';
+import ws from 'ws';
 import { loadConfig } from '../config.js';
+
+neonConfig.webSocketConstructor = ws;
 
 async function main(): Promise<void> {
   const config = loadConfig();
