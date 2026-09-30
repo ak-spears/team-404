@@ -9,16 +9,33 @@ export default async function MyWorkloadPage() {
   const session = await getStaffSession();
   if (!session) redirect('/login?next=/my-workload');
 
-  // Only orders assigned to this staff
-  const result = await callOrdersApi<Order[]>({
-    method: 'GET',
-    path: '/api/orders',
-    role: session.role,
-    userId: String(session.userId),
-    searchParams: { assignedTo: String(session.userId) },
-  });
-  const orders = Array.isArray(result.body) ? result.body : [];
-  const onlyMine = orders.filter(order => order.assignedTo === String(session.userId));
+
+const result = await callOrdersApi<Order[]>({
+  method: 'GET',
+  path: '/api/orders',
+  role: session.role,
+  userId: String(session.userId),
+  searchParams: { mine: 'true' },
+});
+
+
+const onlyMine = Array.isArray(result.body) ? result.body : [];
+
+if (onlyMine.length === 0) {
+  return (
+    <div style={{ textAlign: 'center', marginTop: '2em' }}>
+      <h1>You don’t have any tasks yet</h1>
+      <p className="muted">
+        Pick up an order from the main queue to get started!
+      </p>
+      <p>
+        <Link href="/">Go to staff queue</Link>
+      </p>
+    </div>
+  );
+}
+
+
 
   if (onlyMine.length === 0) {
     return (

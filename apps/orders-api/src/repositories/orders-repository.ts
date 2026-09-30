@@ -18,6 +18,7 @@ const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface OrderRecord {
   id: number;
   customerId: number | null;
+  assignedTo: number | null;
   serviceType: ServiceType;
   quantity: number;
   specNotes: string | null;
@@ -66,6 +67,8 @@ export interface CreateOrderResult {
 
 export interface ListOrdersFilter {
   status?: OrderStatus | undefined;
+  assignedTo?: number;
+
   /** Filters to orders belonging to the customer linked to this user id. */
   userId?: number | undefined;
 }
@@ -286,6 +289,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .select({
           id: orders.id,
           customerId: orders.customerId,
+          assignedTo: orders.assignedTo,
           serviceType: orders.serviceType,
           quantity: orders.quantity,
           specNotes: orders.specNotes,
@@ -308,14 +312,28 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async listOrders(filter) {
+  const conditions = [];
+
+if (filter.status) {
+  conditions.push(eq(orders.status, filter.status));
+}
+
+if (filter.assignedTo !== undefined) {
+  conditions.push(eq(orders.assignedTo, filter.assignedTo));
+}
+
+
+/*
+    async listOrders(filter) {
       const conditions = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
-
+*/
       if (filter.userId !== undefined) {
         const query = db
           .select({
             id: orders.id,
             customerId: orders.customerId,
+            assignedTo: orders.assignedTo,
             serviceType: orders.serviceType,
             quantity: orders.quantity,
             specNotes: orders.specNotes,

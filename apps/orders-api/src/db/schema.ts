@@ -45,12 +45,11 @@ export const customers = mysqlTable('customers', {
 export const orders = mysqlTable('orders', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),
   customerId: bigint('customer_id', { mode: 'number' }).references(() => customers.id),
+  assignedTo: bigint('assigned_to', { mode: 'number' }),
   serviceType: mysqlEnum('service_type', SERVICE_TYPES).notNull(),
   quantity: int('quantity').notNull().default(1),
   specNotes: text('spec_notes'),
   paymentMethod: mysqlEnum('payment_method', PAYMENT_METHODS).notNull(),
-  // Set at creation from the static pricing table, except department_job which staff quotes
-  // manually (see packages/shared/src/pricing.ts) -- stays null until then.
   priceCents: int('price_cents'),
   status: mysqlEnum('status', ORDER_STATUSES).notNull().default('submitted'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -61,6 +60,7 @@ export const orders = mysqlTable('orders', {
   pickupReadyAt: timestamp('pickup_ready_at'),
   completedAt: timestamp('completed_at'),
 });
+
 
 export const orderUploadCredentials = mysqlTable('order_upload_credentials', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),

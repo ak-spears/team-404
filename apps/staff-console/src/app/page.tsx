@@ -6,7 +6,8 @@ import { callOrdersApi } from '../lib/internal-api';
 import { getStaffSession } from '../lib/session';
 
 interface PageProps {
-  searchParams: Promise<{ status?: string }>;
+  //searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; mine?: string }>;
 }
 
 function isOrderStatus(value: string): value is OrderStatus {
@@ -22,11 +23,26 @@ export default async function QueuePage({ searchParams }: PageProps) {
   const { status: rawStatus, mine } = await searchParams;
   const currentStatus = rawStatus && isOrderStatus(rawStatus) ? rawStatus : undefined;
   const mineActive = mine === '1';
-
+/*
   const apiSearchParams: Record<string, string | undefined> = { status: currentStatus };
   if (mineActive) {
     apiSearchParams.assignedTo = String(session.userId);
-  }
+  }*/
+const apiSearchParams: Record<string, string | undefined> = {
+  status: currentStatus,
+};
+
+
+if (mineActive) {
+  apiSearchParams.mine = 'true';
+}
+
+/*
+if (mineActive) {
+  apiSearchParams.assignedTo = String(session.userId);
+}
+*/
+
 
   const result = await callOrdersApi<Order[]>({
     method: 'GET',
@@ -53,7 +69,7 @@ export default async function QueuePage({ searchParams }: PageProps) {
           </span>
         </td>
         <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-        <td>{!order.assignedTo ? <ClaimOrderButton orderId={order.id} /> : null}</td>
+        <td> {!order.assignedTo ? <ClaimOrderButton orderId={order.id} /> : null}</td> 
       </tr>,
     );
   }

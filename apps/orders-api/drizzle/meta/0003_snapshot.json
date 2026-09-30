@@ -1,6 +1,7 @@
 {
   "id": "5a5561c8-7b7a-46a3-8faf-6bcfd6809dd0",
-  "prevId": "04c8dd51-bd02-432b-b209-cdf07af37edd",
+  "prevId": "209ec356-b50d-4421-805d-889093353779",
+
   "version": "5",
   "dialect": "mysql",
   "tables": {
