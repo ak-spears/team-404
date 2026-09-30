@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ORDER_STATUSES, type Order } from '@crimson-copies/shared';
+import { type Order } from '@crimson-copies/shared';
 import { callOrdersApi } from '../../lib/internal-api';
 import { getStaffSession } from '../../lib/session';
-import { ClaimOrderButton } from '../../components/ClaimOrderButton';
+//import { ClaimOrderButton } from '../../components/ClaimOrderButton';
 
 export default async function MyWorkloadPage() {
   const session = await getStaffSession();

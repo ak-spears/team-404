@@ -51,7 +51,7 @@ if (mineActive) {
     userId: String(session.userId),
     searchParams: apiSearchParams,
   });
-  let orders = Array.isArray(result.body) ? result.body : [];
+  const orders = Array.isArray(result.body) ? result.body : [];
 
 
   const orderRows = [];
