@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import type { Order } from '@crimson-copies/shared';
+import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
 import { auth0 } from '../../lib/auth0';
 import { callOrdersApi } from '../../lib/internal-api';
 import { getSession } from '../../lib/session';
@@ -58,7 +58,7 @@ const result = await callOrdersApi<Order[]>({
         <td>{order.serviceType}</td>
         <td>
           <span className="badge" data-status={order.status}>
-            {order.status}
+            {ORDER_STATUS_LABELS[order.status]}
           </span>
         </td>
       </tr>,
