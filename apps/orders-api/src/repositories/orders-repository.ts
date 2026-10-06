@@ -7,6 +7,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
   type ServiceType,
+  type UploadMethod,
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
@@ -17,6 +18,7 @@ const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface OrderRecord {
   id: number;
   customerId: number | null;
+  assignedTo: number | null;
   serviceType: ServiceType;
   quantity: number;
   specNotes: string | null;
@@ -65,6 +67,8 @@ export interface CreateOrderResult {
 
 export interface ListOrdersFilter {
   status?: OrderStatus | undefined;
+  assignedTo?: number;
+
   /** Filters to orders belonging to the customer linked to this user id. */
   userId?: number | undefined;
 }
@@ -74,6 +78,8 @@ export interface RegisterUploadedFileParams {
   objectKey: string;
   originalFilename: string;
   sizeBytes: number;
+  /** How the bytes arrived. Defaults to the column default ('sftp') when omitted. */
+  uploadedVia?: UploadMethod;
 }
 
 export interface RegisterUploadedFileResult {
@@ -122,7 +128,15 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
+  /**
+   * Non-consuming variant of the above, for the web upload path: it proves the caller holds
+   * the credential this order was created with, without burning it -- one order normally has
+   * several files, and the single-use rule exists for the SFTP login, not for authorizing an
+   * upload. Expiry still applies.
+   */
+  checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+
   /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
   verifyOrCreateGoogleUser(input: {
     googleId: string;
@@ -139,9 +153,17 @@ export interface OrdersRepository {
     googleId: string;
     email: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'staff' } | { valid: false }>;
+
+  /** Looks up a user by their verified Auth0 email, creating a new customer account on first sign-in. */
+  verifyOrCreateAuth0User(input: {
+    email: string;
+  }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
+
   /** Stores a CWID on the user. Always overwrites (non-UA Google logins re-collect every time). */
   setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
+
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
+
   /** Generic append-only audit trail write (order_events). */
   recordEvent(
     orderId: number,
@@ -150,6 +172,7 @@ export interface OrdersRepository {
     payload?: Record<string, unknown>,
   ): Promise<void>;
 }
+
 
 /**
  * Generates a one-time SFTP upload password. Not a bcrypt input constraint -- just needs to be
@@ -276,6 +299,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .select({
           id: orders.id,
           customerId: orders.customerId,
+          assignedTo: orders.assignedTo,
           serviceType: orders.serviceType,
           quantity: orders.quantity,
           specNotes: orders.specNotes,
@@ -298,14 +322,28 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async listOrders(filter) {
+  const conditions = [];
+
+if (filter.status) {
+  conditions.push(eq(orders.status, filter.status));
+}
+
+if (filter.assignedTo !== undefined) {
+  conditions.push(eq(orders.assignedTo, filter.assignedTo));
+}
+
+
+/*
+    async listOrders(filter) {
       const conditions = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
-
+*/
       if (filter.userId !== undefined) {
         const query = db
           .select({
             id: orders.id,
             customerId: orders.customerId,
+            assignedTo: orders.assignedTo,
             serviceType: orders.serviceType,
             quantity: orders.quantity,
             specNotes: orders.specNotes,
@@ -352,6 +390,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           objectKey: params.objectKey,
           originalFilename: params.originalFilename,
           sizeBytes: params.sizeBytes,
+          ...(params.uploadedVia ? { uploadedVia: params.uploadedVia } : {}),
         });
         await tx.insert(orderEvents).values({
           orderId: params.orderId,
@@ -364,16 +403,18 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           },
         });
 
-        // Flips files_pending -> files_received -- a no-op (file recorded, status untouched)
-        // for any other current status, e.g. a second file on an already-files_received order.
+        // The first file advances the order to files_received, from either state that can get
+        // there: `submitted` (a web upload right after ordering) or `files_pending`. A no-op
+        // (file recorded, status untouched) from anywhere else, e.g. a second file on an
+        // already-files_received order.
         let statusChanged = false;
-        if (order.status === 'files_pending' && isValidStatusTransition('files_pending', 'files_received')) {
+        if (isValidStatusTransition(order.status, 'files_received')) {
           await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
             actor: 'system',
-            payloadJson: { from: 'files_pending', to: 'files_received' },
+            payloadJson: { from: order.status, to: 'files_received' },
           });
           statusChanged = true;
         }
@@ -385,6 +426,22 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const order = await getOrderById(params.orderId);
       if (!order) return null;
       return { order, statusChanged: res };
+    },
+
+    async checkUploadCredential(username, password) {
+      const [credential] = await db
+        .select()
+        .from(orderUploadCredentials)
+        .where(eq(orderUploadCredentials.username, username))
+        .limit(1);
+
+      if (!credential || credential.expiresAt.getTime() < Date.now()) {
+        return { valid: false };
+      }
+      if (!(await bcrypt.compare(password, credential.passwordHash))) {
+        return { valid: false };
+      }
+      return { valid: true, orderId: credential.orderId };
     },
 
     async verifyUploadCredential(username, password) {
@@ -430,7 +487,122 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       return { valid: true, userId: user.id, username: user.username, role: user.role };
     },
 
-    async verifyOrCreateGoogleUser({ googleId, email }) {
+
+        async verifyOrCreateGoogleUser({ googleId, email }) {
+      // Check if this Google account is already linked to a user.
+      const [existingIdentity] = await db
+        .select()
+        .from(googleIdentities)
+        .where(eq(googleIdentities.googleId, googleId))
+        .limit(1);
+
+      if (existingIdentity) {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, existingIdentity.userId))
+          .limit(1);
+
+        if (!user) {
+          throw new Error('google_identities row references a missing user');
+        }
+
+        return {
+          valid: true,
+          userId: user.id,
+          username: user.username,
+          role: user.role,
+        };
+      }
+
+      // No existing link -- create a brand-new customer account for this Google user.
+      // Username is derived from email since Google doesn't supply one; not guaranteed
+      // collision-free, but good enough for this project's scope.
+      const derivedUsername = (email.split('@')[0] ?? 'user').toLowerCase();
+
+      return db.transaction(async (tx) => {
+        const [insertResult] = await tx.insert(users).values({
+          username: derivedUsername,
+          passwordHash: null,
+          role: 'customer',
+        });
+
+        const newUserId = insertResult.insertId;
+
+        await tx.insert(googleIdentities).values({
+          userId: newUserId,
+          googleId,
+          email,
+        });
+
+        return {
+          valid: true,
+          userId: newUserId,
+          username: derivedUsername,
+          role: 'customer' as const,
+        };
+      });
+    },
+
+    async verifyOrCreateAuth0User({ email }) {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Reuses google_identities as a general "linked email" table -- looks up by email
+      // instead of googleId, so an Auth0 sign-in with the same email as an existing
+      // Google-linked account resolves to the same user.
+      const [existingIdentity] = await db
+        .select()
+        .from(googleIdentities)
+        .where(eq(googleIdentities.email, normalizedEmail))
+        .limit(1);
+
+      if (existingIdentity) {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, existingIdentity.userId))
+          .limit(1);
+
+        if (!user) {
+          throw new Error('google_identities row references a missing user');
+        }
+
+        return {
+          valid: true,
+          userId: user.id,
+          username: user.username,
+          role: user.role,
+        };
+      }
+
+      const derivedUsername = (normalizedEmail.split('@')[0] ?? 'user').toLowerCase();
+
+      return db.transaction(async (tx) => {
+        const [insertResult] = await tx.insert(users).values({
+          username: derivedUsername,
+          passwordHash: null,
+          role: 'customer',
+        });
+
+        const newUserId = insertResult.insertId;
+
+        // Synthetic googleId since there's no real one for an Auth0-only sign-in.
+        // Unique per email so it never collides with a real Google account's id.
+        await tx.insert(googleIdentities).values({
+          userId: newUserId,
+          googleId: `auth0:${normalizedEmail}`,
+          email: normalizedEmail,
+        });
+
+        return {
+          valid: true,
+          userId: newUserId,
+          username: derivedUsername,
+          role: 'customer' as const,
+        };
+      });
+    },
+    /*async verifyOrCreateGoogleUser({ googleId, email }) {
       // Check if this Google account is already linked to a user.
       const [existingIdentity] = await db
         .select()
@@ -443,6 +615,46 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         if (!user) throw new Error('google_identities row references a missing user');
         return { valid: true, userId: user.id, username: user.username, role: user.role };
       }
+
+    async verifyOrCreateAuth0User({ email }) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+  // Reuses google_identities as a general "linked email" table -- looks up by email instead
+  // of googleId, so an Auth0 sign-in with the same email as an existing Google-linked account
+  // resolves to the same user.
+  const [existingIdentity] = await db
+    .select()
+    .from(googleIdentities)
+    .where(eq(googleIdentities.email, normalizedEmail))
+    .limit(1);
+
+  if (existingIdentity) {
+    const [user] = await db.select().from(users).where(eq(users.id, existingIdentity.userId)).limit(1);
+    if (!user) throw new Error('google_identities row references a missing user');
+    return { valid: true, userId: user.id, username: user.username, role: user.role };
+  }
+
+  const derivedUsername = (normalizedEmail.split('@')[0] ?? 'user').toLowerCase();
+
+  return db.transaction(async (tx) => {
+    const [insertResult] = await tx.insert(users).values({
+      username: derivedUsername,
+      passwordHash: null,
+      role: 'customer',
+    });
+    const newUserId = insertResult.insertId;
+
+    // Synthetic googleId since there's no real one for an Auth0-only sign-in -- unique per
+    // email so it never collides with a real Google account's id.
+    await tx.insert(googleIdentities).values({
+      userId: newUserId,
+      googleId: `auth0:${normalizedEmail}`,
+      email: normalizedEmail,
+    });
+
+    return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
+  });
+},
 
       // No existing link -- create a brand-new customer account for this Google user.
       // Username is derived from email since Google doesn't supply one; not guaranteed
@@ -465,7 +677,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
         return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
       });
-    },
+    },*/
 
     async verifyStaffGoogleUser({ googleId, email }) {
       // Already linked -- the user must still be staff (a demoted account shouldn't stay in).
@@ -535,3 +747,5 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     recordEvent,
   };
 }
+
+

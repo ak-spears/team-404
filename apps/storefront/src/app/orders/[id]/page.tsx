@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Order } from '@crimson-copies/shared';
+import { OrderFileUpload } from '../../../components/OrderFileUpload';
 import { callOrdersApi } from '../../../lib/internal-api';
 import { getSession } from '../../../lib/session';
 
@@ -55,6 +56,7 @@ export default async function OrderStatusPage({ params }: PageProps) {
         <dt>Submitted</dt>
         <dd>{new Date(order.createdAt).toLocaleString()}</dd>
       </dl>
+      <OrderFileUpload orderId={order.id} />
     </>
   );
 }

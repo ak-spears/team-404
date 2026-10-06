@@ -13,6 +13,7 @@
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.30.0",
     "@crimson-copies/shared": "workspace:*",
+    "minio": "^8.0.7",
     "next": "15.5.23",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

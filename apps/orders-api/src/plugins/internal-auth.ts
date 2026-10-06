@@ -69,5 +69,10 @@ export function createRequireInternalKey(internalApiKey: string) {
     const id = typeof rawId === 'string' ? rawId : undefined;
 
     request.internalUser = { role, id };
+    console.log('INTERNAL AUTH:', {
+    role,
+    id,
+    path: request.url,
+    });
   };
 }

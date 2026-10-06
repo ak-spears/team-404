@@ -1,12 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
   orderCreateInputSchema,
   orderListQuerySchema,
   orderStatusUpdateInputSchema,
   type Order,
+  type OrderListQuery,
 } from '@crimson-copies/shared';
 import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
+import { getStorageClient, MAX_UPLOAD_BYTES } from '../lib/storage.js';
 import { createRequireInternalKey } from '../plugins/internal-auth.js';
 import {
   InvalidStatusTransitionError,
@@ -14,10 +17,12 @@ import {
   type OrdersRepository,
 } from '../repositories/orders-repository.js';
 
+
 function toOrderDto(record: OrderRecord): Order {
   return {
     id: record.id,
     customerId: record.customerId,
+    assignedTo: record.assignedTo,
     serviceType: record.serviceType,
     quantity: record.quantity,
     specNotes: record.specNotes,
@@ -29,6 +34,31 @@ function toOrderDto(record: OrderRecord): Order {
     pickupReadyAt: record.pickupReadyAt ? record.pickupReadyAt.toISOString() : null,
     completedAt: record.completedAt ? record.completedAt.toISOString() : null,
   };
+}
+
+/**
+ * Print work: documents and images. An allowlist rather than a blocklist -- staff open these
+ * files on shop machines, so anything that isn't recognisably print material is refused.
+ */
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'rtf', 'csv',
+  'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'svg', 'eps', 'ai', 'psd', 'zip',
+]);
+
+/**
+ * Reduces an uploaded filename to something safe to put in an object key: last path segment
+ * only (a browser may send a full path), and nothing outside a conservative character set --
+ * the key namespace is shared by every order, so a name can never be allowed to steer it.
+ */
+function sanitizeFilename(filename: string): string {
+  const lastSegment = filename.split(/[\\/]/).pop() ?? '';
+  const cleaned = lastSegment.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '').slice(0, 200);
+  return cleaned.length > 0 ? cleaned : 'upload';
+}
+
+function fileExtension(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
 }
 
 export interface OrdersRoutesOptions {
@@ -238,34 +268,192 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
     },
   );
 
-  app.get('/api/orders', { preHandler: requireInternalKey }, async (request, reply) => {
+  /**
+   * Customer (or staff) file upload. orders-api owns every write to MinIO the same way it owns
+   * every write to MySQL: the web apps forward the multipart body here and never hold storage
+   * credentials themselves. The object lands first and the `order_files` row second, so a
+   * failure anywhere leaves no row pointing at bytes that aren't there -- the object is deleted
+   * instead.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/orders/:id/files',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      const order = await options.repository.getOrderWithCustomerById(id);
+      if (!order) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      // Uploads are NOT governed by isForbiddenForCustomer, which treats an unidentified
+      // caller as a guest and lets it through. That is tolerable for reads; for writes it
+      // would let anyone with a guessable (sequential) order id attach files to a stranger's
+      // order, or fill the disk. A caller must therefore be staff, the customer the order
+      // belongs to, or hold the upload credential minted when the order was placed -- which
+      // is how a guest, who has no session at all, proves the order is theirs.
+      const { role, id: userId } = request.internalUser;
+      const isOwningCustomer =
+        role === 'customer' && userId !== undefined && order.userId !== null && Number(userId) === order.userId;
+      let authorized = role === 'staff' || isOwningCustomer;
+
+      if (!authorized) {
+        const uploadToken = request.headers['x-upload-token'];
+        if (typeof uploadToken === 'string' && uploadToken.length > 0) {
+          const credential = await options.repository.checkUploadCredential(String(id), uploadToken);
+          authorized = credential.valid && credential.orderId === id;
+        }
+      }
+
+      if (!authorized) {
+        console.error('file upload rejected', { orderId: id, role: role ?? 'anonymous' });
+        return reply.code(403).send({ error: 'forbidden' });
+      }
+
+      const part = await request.file();
+      if (!part) {
+        return reply.code(400).send({ error: 'file_required' });
+      }
+
+      const originalFilename = sanitizeFilename(part.filename);
+      if (!ALLOWED_FILE_EXTENSIONS.has(fileExtension(originalFilename))) {
+        // Drain the stream so the connection isn't left half-read.
+        part.file.resume();
+        return reply.code(415).send({ error: 'unsupported_file_type' });
+      }
+
+      // A UUID prefix keeps two customers' `resume.pdf` apart within the same order and makes
+      // the key unguessable; the original name is preserved in MySQL for staff to read.
+      const objectKey = `${id}/${randomUUID()}-${originalFilename}`;
+      const storage = getStorageClient(options.config);
+      const bucket = options.config.MINIO_BUCKET;
+
+      try {
+        await storage.putObject(bucket, objectKey, part.file, undefined, {
+          'Content-Type': part.mimetype,
+        });
+      } catch (err) {
+        console.error('file upload to storage failed', { orderId: id, objectKey, err });
+        return reply.code(503).send({ error: 'storage_unavailable' });
+      }
+
+      // @fastify/multipart flags the stream once it hits the size limit; whatever reached MinIO
+      // is a truncated file, so drop it rather than record a corrupt upload.
+      if (part.file.truncated) {
+        await storage.removeObject(bucket, objectKey).catch((err: unknown) => {
+          console.error('could not remove truncated upload', { orderId: id, objectKey, err });
+        });
+        return reply.code(413).send({ error: 'file_too_large', maxBytes: MAX_UPLOAD_BYTES });
+      }
+
+      // The size comes from storage rather than a client-supplied header -- it is the only
+      // number that describes what was actually stored.
+      const stored = await storage.statObject(bucket, objectKey);
+
+      let result;
+      try {
+        result = await options.repository.registerUploadedFile({
+          orderId: id,
+          objectKey,
+          originalFilename,
+          sizeBytes: stored.size,
+          uploadedVia: 'web',
+        });
+      } catch (err) {
+        console.error('file registration failed, removing orphaned object', { orderId: id, objectKey, err });
+        await storage.removeObject(bucket, objectKey).catch(() => undefined);
+        throw err;
+      }
+
+      if (!result) {
+        // The order disappeared between the lookup above and the insert.
+        await storage.removeObject(bucket, objectKey).catch(() => undefined);
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      console.log('file uploaded', {
+        orderId: id,
+        objectKey,
+        sizeBytes: stored.size,
+        statusChanged: result.statusChanged,
+      });
+
+      // Same rule as the file-intake registration path: the customer hears about it once, when
+      // the first file flips the order to files_received -- not on every subsequent file.
+      if (result.statusChanged && order.customerEmail) {
+        await doNotifyThing(notifyDeps, id, {
+          template: 'files-received',
+          to: order.customerEmail,
+          data: { orderId: id, customerName: order.customerName ?? 'Customer' },
+        });
+      }
+
+      return reply.code(201).send({
+        objectKey,
+        originalFilename,
+        sizeBytes: stored.size,
+        status: result.order.status,
+      });
+    },
+  );
+app.get<{ Querystring: OrderListQuery }>(
+  '/api/orders',
+  { preHandler: requireInternalKey },
+  async (request, reply) => {
+
     const parsed = orderListQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
     }
 
-    const { role, id: userId } = request.internalUser;
-    let filterUserId: number | undefined;
-    if (parsed.data.mine) {
-      // "mine=true" without a verifiable identity can't be honored (guest orders have no stable
-      // identity to filter by) -- return an empty list rather than erroring, since an empty "my
-      // orders" view is the correct answer when no customer session exists.
-      const parsedUserId = parseUserId(userId);
-      if (role !== 'customer' || parsedUserId === undefined) {
-        return reply.code(200).send([]);
-      }
-      filterUserId = parsedUserId;
-    } else if (role !== 'staff') {
-      // The unfiltered queue is a staff-only view. Without this, any caller could omit `mine`
-      // and read every customer's orders.
-      return reply.code(403).send({ error: 'forbidden' });
-    }
+ const { role, id: userId } = request.internalUser;
 
-    const filter: { status?: typeof parsed.data.status; userId?: number } = {};
-    if (parsed.data.status) filter.status = parsed.data.status;
-    if (filterUserId !== undefined) filter.userId = filterUserId;
+let filterUserId: number | undefined;
+let filterAssignedTo: number | undefined;
 
-    const list = await options.repository.listOrders(filter);
-    return reply.code(200).send(list.map(toOrderDto));
-  });
+if (parsed.data.mine) {
+  const parsedUserId = parseUserId(userId);
+
+  if (parsedUserId === undefined) {
+    return reply.code(200).send([]);
+  }
+
+  if (role === 'customer') {
+    filterUserId = parsedUserId;
+  } else if (role === 'staff') {
+    filterAssignedTo = parsedUserId;
+  } else {
+    return reply.code(200).send([]);
+  }
+} else if (role !== 'staff') {
+  return reply.code(403).send({ error: 'forbidden' });
+}
+
+const filter: {
+  status?: typeof parsed.data.status;
+  userId?: number;
+  assignedTo?: number;
+} = {};
+
+if (parsed.data.status) {
+  filter.status = parsed.data.status;
+}
+
+if (filterUserId !== undefined) {
+  filter.userId = filterUserId;
+}
+
+if (filterAssignedTo !== undefined) {
+  filter.assignedTo = filterAssignedTo;
+}
+
+const list = await options.repository.listOrders(filter);
+
+return reply.code(200).send(list.map(toOrderDto));
+  },
+);
+
 }

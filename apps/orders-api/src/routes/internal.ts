@@ -6,6 +6,7 @@ import {
   setCwidInputSchema,
   uploadCredentialsVerifyInputSchema,
   userCredentialsVerifyInputSchema,
+  auth0EmailVerifyInputSchema,
 } from '@crimson-copies/shared';
 import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
@@ -94,6 +95,25 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       return reply.code(201).send({ registered: true, statusChanged: result.statusChanged });
     },
   );
+
+  /**
+   * Non-consuming check of an order's upload credential, for the storefront BFF: it decides
+   * whether an anonymous caller may be given download links for an order's files. The
+   * /verify route below CONSUMES the credential (single-use, for the SFTP login), which is
+   * why this is separate -- reading a file list must not spend it.
+   */
+  app.post('/internal/upload-credentials/check', { preHandler: requireInternalKey }, async (request, reply) => {
+    const parsed = uploadCredentialsVerifyInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    const result = await options.repository.checkUploadCredential(parsed.data.username, parsed.data.password);
+    if (!result.valid) {
+      return reply.code(200).send({ valid: false });
+    }
+    return reply.code(200).send({ valid: true, orderId: result.orderId });
+  });
 
   app.post(
     '/internal/upload-credentials/verify',
@@ -216,4 +236,24 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
       role: result.role,
     });
   });
+// Called by the storefront's Auth0 callback after it has verified the email is an allowed UA
+// email. Same contract as verify-google/verify-credentials -- looks up or creates the linked
+// user and returns identity info; the caller establishes the session afterward.
+app.post('/internal/auth/verify-auth0-email', { preHandler: requireInternalKey }, async (request, reply) => {
+  const parsed = auth0EmailVerifyInputSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+  }
+
+  const result = await options.repository.verifyOrCreateAuth0User({ email: parsed.data.email });
+  console.log('auth0 login verified', { userId: result.userId, role: result.role });
+  return reply.code(200).send({
+    userId: result.userId,
+    username: result.username,
+    role: result.role,
+  });
+});
+
 }
+
+
