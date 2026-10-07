@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   orderCreateInputSchema,
   orderListQuerySchema,
@@ -15,6 +15,7 @@ import {
   InvalidStatusTransitionError,
   type OrderRecord,
   type OrdersRepository,
+  type OrderWithCustomer,
 } from '../repositories/orders-repository.js';
 
 
@@ -59,6 +60,119 @@ function sanitizeFilename(filename: string): string {
 function fileExtension(filename: string): string {
   const dot = filename.lastIndexOf('.');
   return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * Content-Type by (already allowlisted) extension. Derived here rather than taken from the
+ * multipart part's mimetype, which the uploading browser -- i.e. the customer -- controls: files
+ * are now served from the storefront's own origin, so a `.pdf` declared as text/html must never
+ * be rendered as HTML there.
+ */
+const CONTENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  txt: 'text/plain; charset=utf-8',
+  rtf: 'application/rtf',
+  csv: 'text/csv; charset=utf-8',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  svg: 'image/svg+xml',
+  eps: 'application/postscript',
+  ai: 'application/postscript',
+  psd: 'image/vnd.adobe.photoshop',
+  zip: 'application/zip',
+};
+
+function contentTypeFor(filename: string): string {
+  return CONTENT_TYPES[fileExtension(filename)] ?? 'application/octet-stream';
+}
+
+/**
+ * Formats that execute script when a browser renders them inline. Downloads are served from the
+ * app's own origin, so an inline SVG would run its JavaScript with access to that origin's
+ * cookies -- stored XSS by way of print artwork. These are always sent as attachments.
+ */
+const NEVER_INLINE_EXTENSIONS = new Set(['svg', 'htm', 'html', 'xhtml', 'xml']);
+
+/**
+ * Types opened inline WITHOUT `Content-Security-Policy: sandbox`: browser PDF viewers can render
+ * blank in a sandboxed document (reported for Chrome), which defeats opening a file to print it.
+ * Neither a PDF in the browser's viewer nor a raster image can run script on this origin, and
+ * the server-chosen Content-Type plus `nosniff` stops either being re-read as HTML. Everything
+ * else keeps the sandbox; svg/html/xml are additionally forced to download (see above).
+ */
+const UNSANDBOXED_INLINE_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff']);
+
+/** `inline` so PDFs and images open in a tab for printing; the name is re-sanitized on the way out. */
+function contentDisposition(originalFilename: string): string {
+  const safeName = sanitizeFilename(originalFilename);
+  const mode = NEVER_INLINE_EXTENSIONS.has(fileExtension(safeName)) ? 'attachment' : 'inline';
+  return `${mode}; filename="${safeName}"`;
+}
+
+/**
+ * One line per upload attempt, whatever happened -- the reason is a fixed code, never a header
+ * value, so the upload token can't end up in a log.
+ */
+function logUploadOutcome(fields: {
+  orderId: number;
+  statusCode: number;
+  reason: string;
+  [key: string]: unknown;
+}): void {
+  if (fields.statusCode >= 500) {
+    console.error('upload outcome', fields);
+  } else {
+    console.log('upload outcome', fields);
+  }
+}
+
+type FileAccess = 'staff' | 'owner' | 'upload_token';
+
+/**
+ * Who may write files to, or read file bytes from, an order: staff, the customer the order
+ * belongs to, or the holder of the upload credential minted when the order was placed -- which
+ * is how a guest, who has no session at all, proves the order is theirs. Stricter than
+ * isForbiddenForCustomer on purpose: that rule lets an unidentified caller through (tolerable for
+ * the order summary), but order ids are sequential, so the same rule here would let anyone
+ * enumerate ids and attach files to, or read files from, a stranger's order.
+ */
+async function authorizeFileAccess(
+  request: FastifyRequest,
+  order: OrderWithCustomer,
+  repository: OrdersRepository,
+): Promise<FileAccess | null> {
+  const { role, id: userId } = request.internalUser;
+  if (role === 'staff') return 'staff';
+  if (role === 'customer' && userId !== undefined && order.userId !== null && Number(userId) === order.userId) {
+    return 'owner';
+  }
+
+  const uploadToken = request.headers['x-upload-token'];
+  if (typeof uploadToken === 'string' && uploadToken.length > 0) {
+    const credential = await repository.checkUploadCredential(String(order.id), uploadToken);
+    if (credential.valid && credential.orderId === order.id) return 'upload_token';
+  }
+  return null;
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : 'UnknownError';
+}
+
+function errorCode(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 export interface OrdersRoutesOptions {
@@ -270,10 +384,10 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
 
   /**
    * Customer (or staff) file upload. orders-api owns every write to MinIO the same way it owns
-   * every write to MySQL: the web apps forward the multipart body here and never hold storage
-   * credentials themselves. The object lands first and the `order_files` row second, so a
-   * failure anywhere leaves no row pointing at bytes that aren't there -- the object is deleted
-   * instead.
+   * every write to the database: the web apps forward the multipart body here and never hold
+   * storage credentials themselves. The object lands first and the `order_files` row second, so
+   * a failure anywhere leaves no row pointing at bytes that aren't there -- the object is deleted
+   * instead. Every exit logs one `upload outcome` line.
    */
   app.post<{ Params: { id: string } }>(
     '/api/orders/:id/files',
@@ -281,40 +395,30 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
     async (request, reply) => {
       const id = Number(request.params.id);
       if (!Number.isInteger(id) || id <= 0) {
+        logUploadOutcome({ orderId: id, statusCode: 404, reason: 'invalid_order_id' });
         return reply.code(404).send({ error: 'not_found' });
       }
 
       const order = await options.repository.getOrderWithCustomerById(id);
       if (!order) {
+        logUploadOutcome({ orderId: id, statusCode: 404, reason: 'order_not_found' });
         return reply.code(404).send({ error: 'not_found' });
       }
 
-      // Uploads are NOT governed by isForbiddenForCustomer, which treats an unidentified
-      // caller as a guest and lets it through. That is tolerable for reads; for writes it
-      // would let anyone with a guessable (sequential) order id attach files to a stranger's
-      // order, or fill the disk. A caller must therefore be staff, the customer the order
-      // belongs to, or hold the upload credential minted when the order was placed -- which
-      // is how a guest, who has no session at all, proves the order is theirs.
-      const { role, id: userId } = request.internalUser;
-      const isOwningCustomer =
-        role === 'customer' && userId !== undefined && order.userId !== null && Number(userId) === order.userId;
-      let authorized = role === 'staff' || isOwningCustomer;
-
-      if (!authorized) {
-        const uploadToken = request.headers['x-upload-token'];
-        if (typeof uploadToken === 'string' && uploadToken.length > 0) {
-          const credential = await options.repository.checkUploadCredential(String(id), uploadToken);
-          authorized = credential.valid && credential.orderId === id;
-        }
-      }
-
-      if (!authorized) {
-        console.error('file upload rejected', { orderId: id, role: role ?? 'anonymous' });
+      const access = await authorizeFileAccess(request, order, options.repository);
+      if (!access) {
+        logUploadOutcome({
+          orderId: id,
+          statusCode: 403,
+          reason: 'forbidden',
+          role: request.internalUser.role ?? 'anonymous',
+        });
         return reply.code(403).send({ error: 'forbidden' });
       }
 
       const part = await request.file();
       if (!part) {
+        logUploadOutcome({ orderId: id, statusCode: 400, reason: 'file_required', access });
         return reply.code(400).send({ error: 'file_required' });
       }
 
@@ -322,62 +426,109 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
       if (!ALLOWED_FILE_EXTENSIONS.has(fileExtension(originalFilename))) {
         // Drain the stream so the connection isn't left half-read.
         part.file.resume();
+        logUploadOutcome({
+          orderId: id,
+          statusCode: 415,
+          reason: 'unsupported_file_type',
+          access,
+          extension: fileExtension(originalFilename),
+        });
         return reply.code(415).send({ error: 'unsupported_file_type' });
       }
 
       // A UUID prefix keeps two customers' `resume.pdf` apart within the same order and makes
-      // the key unguessable; the original name is preserved in MySQL for staff to read.
+      // the key unguessable; the original name is preserved in the database for staff to read.
       const objectKey = `${id}/${randomUUID()}-${originalFilename}`;
       const storage = getStorageClient(options.config);
       const bucket = options.config.MINIO_BUCKET;
 
       try {
         await storage.putObject(bucket, objectKey, part.file, undefined, {
-          'Content-Type': part.mimetype,
+          'Content-Type': contentTypeFor(originalFilename),
         });
       } catch (err) {
-        console.error('file upload to storage failed', { orderId: id, objectKey, err });
+        logUploadOutcome({
+          orderId: id,
+          statusCode: 503,
+          reason: 'storage_put_failed',
+          access,
+          objectKey,
+          errorName: errorName(err),
+          errorCode: errorCode(err),
+        });
         return reply.code(503).send({ error: 'storage_unavailable' });
       }
+
+      const removeObject = async (why: string): Promise<void> => {
+        try {
+          await storage.removeObject(bucket, objectKey);
+        } catch (err) {
+          console.error('could not remove orphaned upload', {
+            orderId: id,
+            objectKey,
+            why,
+            errorName: errorName(err),
+            errorCode: errorCode(err),
+          });
+        }
+      };
 
       // @fastify/multipart flags the stream once it hits the size limit; whatever reached MinIO
       // is a truncated file, so drop it rather than record a corrupt upload.
       if (part.file.truncated) {
-        await storage.removeObject(bucket, objectKey).catch((err: unknown) => {
-          console.error('could not remove truncated upload', { orderId: id, objectKey, err });
-        });
+        await removeObject('truncated');
+        logUploadOutcome({ orderId: id, statusCode: 413, reason: 'file_too_large', access });
         return reply.code(413).send({ error: 'file_too_large', maxBytes: MAX_UPLOAD_BYTES });
       }
 
       // The size comes from storage rather than a client-supplied header -- it is the only
-      // number that describes what was actually stored.
-      const stored = await storage.statObject(bucket, objectKey);
-
+      // number that describes what was actually stored. Both the stat and the database write
+      // sit inside one try: either failing after the bytes landed must not leave an orphan.
+      let sizeBytes: number;
       let result;
       try {
+        sizeBytes = (await storage.statObject(bucket, objectKey)).size;
         result = await options.repository.registerUploadedFile({
           orderId: id,
           objectKey,
           originalFilename,
-          sizeBytes: stored.size,
+          sizeBytes,
           uploadedVia: 'web',
         });
       } catch (err) {
-        console.error('file registration failed, removing orphaned object', { orderId: id, objectKey, err });
-        await storage.removeObject(bucket, objectKey).catch(() => undefined);
-        throw err;
+        await removeObject('registration_failed');
+        // Name, driver code and message only: the error object itself can carry connection
+        // details, and a message from Postgres/MinIO never includes credentials.
+        logUploadOutcome({
+          orderId: id,
+          statusCode: 500,
+          reason: 'registration_failed',
+          access,
+          objectKey,
+          errorName: errorName(err),
+          errorCode: errorCode(err),
+          errorMessage: err instanceof Error ? err.message : undefined,
+        });
+        return reply.code(500).send({
+          error: 'file_registration_failed',
+          message: 'The file was received but could not be saved to the order. Please try again.',
+        });
       }
 
       if (!result) {
         // The order disappeared between the lookup above and the insert.
-        await storage.removeObject(bucket, objectKey).catch(() => undefined);
+        await removeObject('order_vanished');
+        logUploadOutcome({ orderId: id, statusCode: 404, reason: 'order_not_found', access });
         return reply.code(404).send({ error: 'not_found' });
       }
 
-      console.log('file uploaded', {
+      logUploadOutcome({
         orderId: id,
+        statusCode: 201,
+        reason: 'uploaded',
+        access,
         objectKey,
-        sizeBytes: stored.size,
+        sizeBytes,
         statusChanged: result.statusChanged,
       });
 
@@ -392,11 +543,74 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
       }
 
       return reply.code(201).send({
-        objectKey,
         originalFilename,
-        sizeBytes: stored.size,
+        sizeBytes,
         status: result.order.status,
       });
+    },
+  );
+
+  /**
+   * Streams one uploaded file's bytes. MinIO listens on 127.0.0.1 only, so browsers can't follow
+   * a presigned link to it; instead the storefront and staff-console BFFs proxy this route behind
+   * their own session checks. Access is the same rule as uploading (authorizeFileAccess).
+   */
+  app.get<{ Params: { id: string; fileId: string } }>(
+    '/api/orders/:id/files/:fileId/content',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const fileId = Number(request.params.fileId);
+      if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(fileId) || fileId <= 0) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      const order = await options.repository.getOrderWithCustomerById(id);
+      if (!order) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      const access = await authorizeFileAccess(request, order, options.repository);
+      if (!access) {
+        console.log('file download rejected', { orderId: id, fileId, role: request.internalUser.role ?? 'anonymous' });
+        return reply.code(403).send({ error: 'forbidden' });
+      }
+
+      const file = await options.repository.getOrderFile(id, fileId);
+      if (!file) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      let stream;
+      try {
+        stream = await getStorageClient(options.config).getObject(options.config.MINIO_BUCKET, file.objectKey);
+      } catch (err) {
+        const code = errorCode(err);
+        console.error('file download from storage failed', {
+          orderId: id,
+          fileId,
+          errorName: errorName(err),
+          errorCode: code,
+        });
+        if (code === 'NoSuchKey') {
+          return reply.code(404).send({ error: 'not_found' });
+        }
+        return reply.code(503).send({ error: 'storage_unavailable' });
+      }
+
+      console.log('file downloaded', { orderId: id, fileId, access });
+      reply
+        .code(200)
+        .header('Content-Type', contentTypeFor(file.originalFilename))
+        .header('Content-Length', String(file.sizeBytes))
+        .header('Content-Disposition', contentDisposition(file.originalFilename))
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Cache-Control', 'private, no-store');
+      if (!UNSANDBOXED_INLINE_EXTENSIONS.has(fileExtension(sanitizeFilename(file.originalFilename)))) {
+        // Belt and braces for anything else rendered inline: no script, no same-origin access.
+        reply.header('Content-Security-Policy', 'sandbox');
+      }
+      return reply.send(stream);
     },
   );
 app.get<{ Querystring: OrderListQuery }>(

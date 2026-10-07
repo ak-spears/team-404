@@ -19,6 +19,9 @@
   --error-text: #7a1b1b;
   --error-bg: #fbeaea;
   --error-border: #f0c9c9;
+  --success-text: #1d5b2c;
+  --success-bg: #e8f5ec;
+  --success-border: #bfe0c9;
   --hover-bg: rgba(28, 26, 27, 0.05);
   color-scheme: light;
 }
@@ -44,6 +47,9 @@
     --error-text: #f2a3a3;
     --error-bg: #2c1a1a;
     --error-border: #4a2626;
+    --success-text: #9fd9ae;
+    --success-bg: #17271b;
+    --success-border: #2b4a33;
     --hover-bg: rgba(255, 255, 255, 0.06);
     color-scheme: dark;
   }
@@ -66,6 +72,9 @@
   --error-text: #f2a3a3;
   --error-bg: #2c1a1a;
   --error-border: #4a2626;
+  --success-text: #9fd9ae;
+  --success-bg: #17271b;
+  --success-border: #2b4a33;
   --hover-bg: rgba(255, 255, 255, 0.06);
   color-scheme: dark;
 }
@@ -452,6 +461,16 @@ button:disabled {
 
 .muted {
   color: var(--muted);
+}
+
+.success {
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .error {

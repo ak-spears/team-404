@@ -1,54 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import { orderCreateInputSchema } from '@crimson-copies/shared';
+import { orderCreateInputSchema, type UploadInstructions } from '@crimson-copies/shared';
 
+import { getAuthenticatedUser } from '../../../lib/customer-identity';
 import { callOrdersApi } from '../../../lib/internal-api';
-import { auth0 } from '../../../lib/auth0';
-import { getSession } from '../../../lib/session';
-
-async function getAuthenticatedUser() {
-  const localSession = await getSession();
-
-  if (localSession) {
-    return {
-      userId: String(localSession.userId),
-      role: localSession.role,
-    };
-  }
-
-  const authSession = await auth0.getSession();
-  const email = authSession?.user?.email;
-
-  if (!email) {
-    return {
-      userId: undefined,
-      role: undefined,
-    };
-  }
-
-  const result = await callOrdersApi<{
-    userId: number;
-    username: string;
-    role: 'customer' | 'staff';
-  }>({
-    method: 'POST',
-    path: '/internal/auth/verify-auth0-email',
-    body: { email },
-  });
-
-  if (result.status !== 200) {
-    console.error('Auth0 user verification failed:', result);
-    return {
-      userId: undefined,
-      role: undefined,
-    };
-  }
-
-  return {
-    userId: String(result.body.userId),
-    role: result.body.role,
-  };
-}
+import { setUploadTokenCookie } from '../../../lib/upload-token-cookie';
 
 export async function POST(request: Request): Promise<NextResponse> {
   console.log('POST /api/orders: request received');
@@ -66,7 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const user = await getAuthenticatedUser();
 
-  const result = await callOrdersApi({
+  const result = await callOrdersApi<OrderCreateResult>({
     method: 'POST',
     path: '/api/orders',
     role: user.role,
@@ -79,7 +35,34 @@ export async function POST(request: Request): Promise<NextResponse> {
     userId: user.userId,
   });
 
-  return NextResponse.json(result.body, { status: result.status });
+  if (result.status !== 201 || !isOrderCreateResult(result.body)) {
+    return NextResponse.json(result.body, { status: result.status });
+  }
+
+  // The upload credential goes into an HttpOnly cookie scoped to this order and is dropped from
+  // the JSON, so browser JavaScript never holds it and a refresh doesn't lose it.
+  const { password, ...uploadInstructions } = result.body.uploadInstructions;
+  const response = NextResponse.json(
+    { orderId: result.body.orderId, uploadInstructions },
+    { status: 201 },
+  );
+  setUploadTokenCookie(response, result.body.orderId, password, uploadInstructions.expiresAt);
+  return response;
+}
+
+interface OrderCreateResult {
+  orderId: number;
+  uploadInstructions: UploadInstructions;
+}
+
+function isOrderCreateResult(value: unknown): value is OrderCreateResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<OrderCreateResult>;
+  return (
+    typeof candidate.orderId === 'number' &&
+    typeof candidate.uploadInstructions?.password === 'string' &&
+    typeof candidate.uploadInstructions.expiresAt === 'string'
+  );
 }
 
 export async function GET(): Promise<NextResponse> {

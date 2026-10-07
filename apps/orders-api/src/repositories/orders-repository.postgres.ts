@@ -8,6 +8,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
   type ServiceType,
+  type UploadMethod,
 } from '@crimson-copies/shared';
 import type { Db } from '../db/client.postgres.js';
 import {
@@ -19,6 +20,7 @@ import {
   orderUploadCredentials,
   users,
 } from '../db/schema.postgres.js';
+import { InvalidStatusTransitionError } from './orders-repository.js';
 
 const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -77,6 +79,8 @@ export interface RegisterUploadedFileParams {
   objectKey: string;
   originalFilename: string;
   sizeBytes: number;
+  /** How the bytes arrived. Defaults to the column default ('sftp') when omitted. */
+  uploadedVia?: UploadMethod;
 }
 
 export interface RegisterUploadedFileResult {
@@ -96,15 +100,10 @@ export interface UpdateOrderStatusParams {
   actor: OrderEventActor;
 }
 
-export class InvalidStatusTransitionError extends Error {
-  constructor(
-    public readonly from: OrderStatus,
-    public readonly to: OrderStatus,
-  ) {
-    super(`Cannot transition order from '${from}' to '${to}'`);
-    this.name = 'InvalidStatusTransitionError';
-  }
-}
+// Re-exported rather than redeclared: routes/orders.ts catches this class with `instanceof`
+// against the MySQL module's copy, so a second class here would never match and an invalid
+// status transition would surface as a 503 instead of a 400.
+export { InvalidStatusTransitionError };
 
 export interface OrderFileRecord {
   id: number;
@@ -120,6 +119,7 @@ export interface OrdersRepository {
   getOrderWithCustomerById(id: number): Promise<OrderWithCustomer | null>;
   listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]>;
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
+  getOrderFile(orderId: number, fileId: number): Promise<OrderFileRecord | null>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
@@ -329,6 +329,21 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .orderBy(orderFiles.uploadedAt);
     },
 
+    async getOrderFile(orderId, fileId) {
+      const [row] = await db
+        .select({
+          id: orderFiles.id,
+          objectKey: orderFiles.objectKey,
+          originalFilename: orderFiles.originalFilename,
+          sizeBytes: orderFiles.sizeBytes,
+          uploadedAt: orderFiles.uploadedAt,
+        })
+        .from(orderFiles)
+        .where(and(eq(orderFiles.id, fileId), eq(orderFiles.orderId, orderId)))
+        .limit(1);
+      return row ?? null;
+    },
+
     async registerUploadedFile(params) {
       const res = await db.transaction(async (tx) => {
         const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
@@ -339,6 +354,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           objectKey: params.objectKey,
           originalFilename: params.originalFilename,
           sizeBytes: params.sizeBytes,
+          ...(params.uploadedVia ? { uploadedVia: params.uploadedVia } : {}),
         });
 
         await tx.insert(orderEvents).values({

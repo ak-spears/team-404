@@ -1,37 +1,31 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   PAYMENT_METHODS,
   SERVICE_TYPES,
   type PaymentMethod,
   type ServiceType,
-  type UploadInstructions,
 } from '@crimson-copies/shared';
-import {
-  ACCEPTED_EXTENSIONS,
-  MAX_UPLOAD_BYTES,
-  uploadErrorMessage,
-  uploadOrderFile,
-} from '../lib/order-files';
-import { OrderFileUpload } from './OrderFileUpload';
+import { ACCEPTED_EXTENSIONS, MAX_UPLOAD_BYTES, uploadErrorMessage, uploadOrderFile } from '../lib/order-files';
 
+/** The upload credential is not in this response -- the BFF keeps it in an HttpOnly cookie. */
 interface OrderCreateResponse {
   orderId: number;
-  uploadInstructions: UploadInstructions;
 }
 
 function isOrderCreateResponse(value: unknown): value is OrderCreateResponse {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'orderId' in value &&
-    'uploadInstructions' in value
+    typeof (value as { orderId?: unknown }).orderId === 'number'
   );
 }
 
 /** The order form. Submits to the storefront's own BFF route. */
 export function OrderForm() {
+  const router = useRouter();
   const [serviceType, setServiceType] = useState<ServiceType>(SERVICE_TYPES[0]);
   const [quantity, setQuantity] = useState(1);
   const [specNotes, setSpecNotes] = useState('');
@@ -41,14 +35,12 @@ export function OrderForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [res, setRes] = useState<OrderCreateResponse | null>(null);
+  const [placedOrderId, setPlacedOrderId] = useState<number | null>(null);
   // The file is chosen here but can only be uploaded once the order exists -- order_files rows
   // reference an order id -- so it is held until POST /api/orders returns one.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
 
   function handleFileChosen(event: ChangeEvent<HTMLInputElement>): void {
     const file = event.target.files?.[0] ?? null;
@@ -93,26 +85,26 @@ export function OrderForm() {
         setError('Unexpected response from the server.');
         return;
       }
-      setRes(body);
+      setPlacedOrderId(body.orderId);
 
       // One action for the customer, two requests underneath. A failure here is reported as
       // "the order was placed, the file wasn't" -- never as a failed order, which would leave
-      // someone unsure whether they had ordered anything at all.
+      // someone unsure whether they had ordered anything at all. Either way the customer ends
+      // up on the order's own page, which reloads the order and its files on every visit, so a
+      // refresh never drops them back onto an empty form.
+      const outcomeQuery = new URLSearchParams();
       if (pendingFile) {
         setUploadPercent(0);
-        const outcome = await uploadOrderFile(
-          body.orderId,
-          pendingFile,
-          setUploadPercent,
-          body.uploadInstructions.password,
-        );
+        const outcome = await uploadOrderFile(body.orderId, pendingFile, setUploadPercent);
         setUploadPercent(null);
         if (outcome.ok) {
-          setReloadKey((key) => key + 1);
+          outcomeQuery.set('uploaded', pendingFile.name);
         } else {
-          setUploadError(uploadErrorMessage(outcome.status));
+          outcomeQuery.set('uploadError', String(outcome.status));
         }
       }
+      const query = outcomeQuery.toString();
+      router.replace(`/orders/${body.orderId}${query ? `?${query}` : ''}`);
     } catch {
       setError('Network error -- please try again.');
     } finally {
@@ -120,31 +112,20 @@ export function OrderForm() {
     }
   }
 
-  if (res) {
+  if (placedOrderId !== null) {
     return (
       <div>
-        <h2>Order #{res.orderId} submitted</h2>
-        <p>
-          A confirmation email is on its way. See your order at{' '}
-          <a href={`/orders/${res.orderId}`}>order status</a>.
-        </p>
-        {uploadPercent !== null && (
+        <h2>Order #{placedOrderId} submitted</h2>
+        {uploadPercent !== null ? (
           <p className="upload-progress" role="status">
             <progress value={uploadPercent} max={100} /> Uploading {pendingFile?.name}...{' '}
             {uploadPercent}%
           </p>
-        )}
-        {uploadError && (
-          <p className="error">
-            Your order was placed, but the file didn&apos;t upload: {uploadError} Add it below --
-            the order itself is fine.
+        ) : (
+          <p className="muted" role="status">
+            Opening your order...
           </p>
         )}
-        <OrderFileUpload
-          orderId={res.orderId}
-          reloadKey={reloadKey}
-          uploadToken={res.uploadInstructions.password}
-        />
       </div>
     );
   }
