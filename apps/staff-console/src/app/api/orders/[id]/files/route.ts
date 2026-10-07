@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
+import { BASE_PATH } from '../../../../../lib/base-path';
 import { callOrdersApi } from '../../../../../lib/internal-api';
-import { presignFileUrl } from '../../../../../lib/minio';
 import { getStaffSession } from '../../../../../lib/session';
 
 interface OrderFileRecord {
-  objectKey: string;
+  id: number;
   originalFilename: string;
   sizeBytes: number;
   uploadedAt: string;
 }
 
 interface OrderFileLink {
+  id: number;
   originalFilename: string;
   sizeBytes: number;
   uploadedAt: string;
@@ -22,11 +23,10 @@ interface RouteParams {
 }
 
 /**
- * BFF for the staff-console "view uploaded files via presigned MinIO link" feature -- calls
- * orders-api's `GET /api/orders/:id/files` for the object keys, then presigns each one against
- * MinIO directly. Independently re-checks the session (see the status route's comment for why).
- * Until file upload is wired up, no file ever actually lands in MinIO, so this always returns
- * an empty list.
+ * BFF for the staff-console file list -- calls orders-api's `GET /api/orders/:id/files` and
+ * links each file to this app's own download route (./[fileId]/route.ts). MinIO listens on
+ * 127.0.0.1 only, so a presigned MinIO link would be unreachable from a staff browser.
+ * Independently re-checks the session (see the status route's comment for why).
  */
 export async function GET(_request: Request, { params }: RouteParams): Promise<NextResponse> {
   console.log('GET /api/orders/:id/files: request received');
@@ -37,6 +37,10 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
   }
 
   const { id } = await params;
+  if (!/^[1-9]\d{0,15}$/.test(id)) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
   const result = await callOrdersApi<OrderFileRecord[]>({
     method: 'GET',
     path: `/api/orders/${id}/files`,
@@ -46,24 +50,19 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
 
   if (result.status !== 200 || !Array.isArray(result.body)) {
     console.error('GET /api/orders/:id/files: request completed', { orderId: id, status: result.status });
-    return NextResponse.json(result.body, { status: result.status });
+    return NextResponse.json(result.body ?? { error: 'files_unavailable' }, {
+      status: result.status === 200 ? 502 : result.status,
+    });
   }
 
-  // Disabled once presigned URLs replaced direct-download links -- kept in case we need to fall
-  // back to unsigned URLs for a debugging session.
-  const USE_UNSIGNED_URLS = false;
-  if (USE_UNSIGNED_URLS) {
-    console.log('serving unsigned file URLs', { orderId: id });
-  }
-
-  const files: OrderFileLink[] = await Promise.all(
-    result.body.map(async (file) => ({
-      originalFilename: file.originalFilename,
-      sizeBytes: file.sizeBytes,
-      uploadedAt: file.uploadedAt,
-      url: await presignFileUrl(file.objectKey, file.originalFilename),
-    })),
-  );
+  // Client-side links are not basePath-aware, so the /staff prefix is spelled out here.
+  const files: OrderFileLink[] = result.body.map((file) => ({
+    id: file.id,
+    originalFilename: file.originalFilename,
+    sizeBytes: file.sizeBytes,
+    uploadedAt: file.uploadedAt,
+    url: `${BASE_PATH}/api/orders/${id}/files/${file.id}`,
+  }));
 
   console.log('GET /api/orders/:id/files: request completed', { orderId: id, fileCount: files.length });
   return NextResponse.json({ files }, { status: 200 });

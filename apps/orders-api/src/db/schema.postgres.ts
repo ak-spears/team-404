@@ -9,6 +9,7 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { UPLOAD_METHODS } from '@crimson-copies/shared';
 
 export const userRoleEnum = pgEnum('user_role', ['customer', 'staff']);
 export const serviceTypeEnum = pgEnum('service_type', [
@@ -28,7 +29,7 @@ export const orderStatusEnum = pgEnum('order_status', [
   'completed',
   'cancelled',
 ]);
-export const uploadMethodEnum = pgEnum('upload_method', ['sftp']);
+export const uploadMethodEnum = pgEnum('upload_method', UPLOAD_METHODS);
 export const orderEventActorEnum = pgEnum('order_event_actor', ['system', 'staff', 'customer']);
 
 export const users = pgTable('users', {

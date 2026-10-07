@@ -8,6 +8,20 @@
       "when": 1790652090902,
       "tag": "0000_shiny_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791321575187,
+      "tag": "0001_add_web_upload_method",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791321585767,
+      "tag": "0002_add_orders_assigned_to",
+      "breakpoints": true
     }
   ]
 }

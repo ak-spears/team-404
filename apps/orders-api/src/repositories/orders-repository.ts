@@ -126,6 +126,8 @@ export interface OrdersRepository {
   listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]>;
   /** `order_files` rows for an order, oldest first -- staff-console presigns MinIO GETs from `objectKey`. */
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
+  /** One file, only if it belongs to `orderId` -- a file id alone never identifies a file. */
+  getOrderFile(orderId: number, fileId: number): Promise<OrderFileRecord | null>;
   registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   /**
@@ -368,6 +370,21 @@ if (filter.assignedTo !== undefined) {
         .from(orderFiles)
         .where(eq(orderFiles.orderId, orderId))
         .orderBy(orderFiles.uploadedAt);
+    },
+
+    async getOrderFile(orderId, fileId) {
+      const [row] = await db
+        .select({
+          id: orderFiles.id,
+          objectKey: orderFiles.objectKey,
+          originalFilename: orderFiles.originalFilename,
+          sizeBytes: orderFiles.sizeBytes,
+          uploadedAt: orderFiles.uploadedAt,
+        })
+        .from(orderFiles)
+        .where(and(eq(orderFiles.id, fileId), eq(orderFiles.orderId, orderId)))
+        .limit(1);
+      return row ?? null;
     },
 
     async registerUploadedFile(params) {
