@@ -145,16 +145,6 @@ export interface OrdersRepository {
     email: string;
     name?: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
-  /**
-   * Looks up a user by their linked Google account for the staff console. Unlike
-   * `verifyOrCreateGoogleUser`, never creates a user or role -- a `users` row with
-   * `role: 'staff'` must already exist (matched by username derived from the email on first
-   * sign-in), otherwise this fails.
-   */
-  verifyStaffGoogleUser(input: {
-    googleId: string;
-    email: string;
-  }): Promise<{ valid: true; userId: number; username: string; role: 'staff' } | { valid: false }>;
 
   /** Looks up a user by their verified Auth0 email, creating a new customer account on first sign-in. */
   verifyOrCreateAuth0User(input: {
@@ -695,33 +685,6 @@ if (filter.assignedTo !== undefined) {
         return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
       });
     },*/
-
-    async verifyStaffGoogleUser({ googleId, email }) {
-      // Already linked -- the user must still be staff (a demoted account shouldn't stay in).
-      const [existingIdentity] = await db
-        .select()
-        .from(googleIdentities)
-        .where(eq(googleIdentities.googleId, googleId))
-        .limit(1);
-
-      if (existingIdentity) {
-        const [user] = await db.select().from(users).where(eq(users.id, existingIdentity.userId)).limit(1);
-        if (!user) throw new Error('google_identities row references a missing user');
-        return user.role === 'staff'
-          ? { valid: true, userId: user.id, username: user.username, role: 'staff' }
-          : { valid: false };
-      }
-
-      // No existing link -- only allow it if a staff user already exists for the derived
-      // username (same derivation as verifyOrCreateGoogleUser). Never creates a user: staff
-      // accounts must be provisioned ahead of time, this only links the Google identity to one.
-      const derivedUsername = (email.split('@')[0] ?? 'user').toLowerCase();
-      const [user] = await db.select().from(users).where(eq(users.username, derivedUsername)).limit(1);
-      if (!user || user.role !== 'staff') return { valid: false };
-
-      await db.insert(googleIdentities).values({ userId: user.id, googleId, email });
-      return { valid: true, userId: user.id, username: user.username, role: 'staff' };
-    },
 
     async setUserCwid(userId, cwid) {
       const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
