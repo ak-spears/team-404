@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
-import type { Order } from '@crimson-copies/shared';
+import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
 import { OrderFileUpload, type UploadNotice } from '../../../components/OrderFileUpload';
+import { OrderProgressTracker } from '../../../components/OrderProgressTracker';
 import { getFileCaller, isPositiveIntegerId } from '../../../lib/file-access';
 import { callOrdersApi } from '../../../lib/internal-api';
 import { filesLoadErrorMessage, uploadErrorMessage } from '../../../lib/order-files';
@@ -71,13 +72,14 @@ export default async function OrderStatusPage({ params, searchParams }: PageProp
   return (
     <>
       <h1>Order #{order.id}</h1>
+      <OrderProgressTracker status={order.status} />
       <dl>
         <dt>Service</dt>
         <dd>{order.serviceType}</dd>
         <dt>Status</dt>
         <dd>
           <span className="badge" data-status={order.status}>
-            {order.status}
+            {ORDER_STATUS_LABELS[order.status]}
           </span>
         </dd>
         <dt>Quantity</dt>
