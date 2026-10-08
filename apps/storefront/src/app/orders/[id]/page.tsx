@@ -1,27 +1,55 @@
 import { notFound } from 'next/navigation';
 import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
-import { OrderFileUpload } from '../../../components/OrderFileUpload';
+import { OrderFileUpload, type UploadNotice } from '../../../components/OrderFileUpload';
 import { OrderProgressTracker } from '../../../components/OrderProgressTracker';
+import { getFileCaller, isPositiveIntegerId } from '../../../lib/file-access';
 import { callOrdersApi } from '../../../lib/internal-api';
-import { getSession } from '../../../lib/session';
+import { filesLoadErrorMessage, uploadErrorMessage } from '../../../lib/order-files';
+import { listOrderFiles } from '../../../lib/order-files-server';
+
+// Order status and files change underneath this page (staff updates, uploads), so it is
+// rendered fresh on every request -- never served from a cache.
+export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ uploaded?: string | string[]; uploadError?: string | string[] }>;
+}
+
+/**
+ * Checkout redirects here with the outcome of its upload: `?uploaded=<name>` or
+ * `?uploadError=<status>`. Both are display-only (React escapes the name) and are mapped
+ * through the same fixed messages the upload card uses.
+ */
+function checkoutNotice(params: Awaited<PageProps['searchParams']>): UploadNotice | undefined {
+  const uploaded = typeof params.uploaded === 'string' ? params.uploaded.slice(0, 200) : undefined;
+  if (uploaded) return { kind: 'success', text: uploaded };
+  const status = typeof params.uploadError === 'string' ? Number(params.uploadError) : NaN;
+  if (Number.isInteger(status)) {
+    return {
+      kind: 'error',
+      text: `Your order was placed, but the file didn't upload: ${uploadErrorMessage(status)} Add it below -- the order itself is fine.`,
+    };
+  }
+  return undefined;
 }
 
 /**
  * Order-status page, reachable by direct link (the URL customers get in their confirmation
- * email) without requiring a session -- matches the guest-checkout flow. A signed-in customer
- * viewing someone else's order id still gets a 403 from orders-api (see routes/orders.ts).
+ * email). Loads the order AND its files from orders-api on every render, so refreshing after an
+ * upload keeps the customer here with an accurate list. A signed-in customer viewing someone
+ * else's order id still gets a 403 from orders-api (see routes/orders.ts).
  */
-export default async function OrderStatusPage({ params }: PageProps) {
+export default async function OrderStatusPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const session = await getSession();
+  if (!isPositiveIntegerId(id)) notFound();
+
+  const caller = await getFileCaller();
   const result = await callOrdersApi<Order>({
     method: 'GET',
     path: `/api/orders/${id}`,
-    role: session?.role,
-    userId: session ? String(session.userId) : undefined,
+    role: caller.role,
+    userId: caller.userId,
   });
 
   if (result.status === 404) notFound();
@@ -39,6 +67,7 @@ export default async function OrderStatusPage({ params }: PageProps) {
   if (result.status !== 200) notFound();
 
   const order = result.body;
+  const files = await listOrderFiles(order.id, caller);
 
   return (
     <>
@@ -58,9 +87,12 @@ export default async function OrderStatusPage({ params }: PageProps) {
         <dt>Submitted</dt>
         <dd>{new Date(order.createdAt).toLocaleString()}</dd>
       </dl>
-      <OrderFileUpload orderId={order.id} />
+      <OrderFileUpload
+        orderId={order.id}
+        initialFiles={files.ok ? files.files : null}
+        initialLoadError={files.ok ? null : filesLoadErrorMessage(files.status)}
+        initialNotice={checkoutNotice(await searchParams)}
+      />
     </>
   );
 }
-
-

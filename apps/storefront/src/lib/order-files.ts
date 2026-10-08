@@ -13,7 +13,20 @@ export const ACCEPTED_EXTENSIONS =
 /** Mirrors MAX_UPLOAD_BYTES in orders-api (apps/orders-api/src/lib/storage.ts). */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
-/** Each case corresponds to a status orders-api's upload route actually returns. */
+/** One row of an order's file list, as the storefront's BFF returns it. */
+export interface OrderFile {
+  id: number;
+  originalFilename: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  /**
+   * The storefront's own download route for this file. Absent when this viewer can't be
+   * entitled to the bytes -- e.g. an anonymous visitor reading an order by id sees the list only.
+   */
+  url?: string;
+}
+
+/** Each case corresponds to a status orders-api's upload route (or the BFF) actually returns. */
 export function uploadErrorMessage(status: number): string {
   switch (status) {
     case 0:
@@ -26,11 +39,22 @@ export function uploadErrorMessage(status: number): string {
       return 'That file is too large -- the limit is 50 MB.';
     case 415:
       return "That file type isn't accepted. Upload a document or an image.";
+    case 500:
+      return "The file reached us but couldn't be saved to your order. Please try again.";
+    case 502:
+      return "Couldn't reach the order service. Please try again shortly.";
     case 503:
       return 'File storage is unavailable right now. Please try again shortly.';
     default:
       return 'Upload failed. Please try again.';
   }
+}
+
+/** Shown when the file LIST can't be loaded -- distinct from an order that has no files. */
+export function filesLoadErrorMessage(status: number): string {
+  if (status === 0) return "Couldn't load your files -- network error. Refresh to try again.";
+  if (status === 403) return "Couldn't load your files: this order isn't associated with your account.";
+  return `Couldn't load your files (error ${status}). Refresh to try again.`;
 }
 
 export interface UploadOutcome {
@@ -51,20 +75,15 @@ export function uploadOrderFile(
   orderId: number,
   file: File,
   onProgress: (percent: number) => void,
-  /**
-   * The one-time credential returned when the order was placed. A signed-in customer doesn't
-   * need it -- their session identifies them -- but a guest has nothing else to prove the
-   * order is theirs, and orders-api refuses anonymous uploads without it.
-   */
-  uploadToken?: string,
 ): Promise<UploadOutcome> {
+  // No credential is passed here: a guest's upload credential travels as the HttpOnly cookie
+  // set when the order was placed, which the browser attaches to this same-origin request.
   return new Promise((resolve) => {
     const body = new FormData();
     body.append('file', file);
 
     const request = new XMLHttpRequest();
     request.open('POST', `/api/orders/${orderId}/files`);
-    if (uploadToken) request.setRequestHeader('X-Upload-Token', uploadToken);
     request.upload.addEventListener('progress', (progress) => {
       if (progress.lengthComputable) {
         onProgress(Math.round((progress.loaded / progress.total) * 100));

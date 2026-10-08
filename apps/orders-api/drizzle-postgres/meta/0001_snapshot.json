@@ -1,5 +1,5 @@
 {
-  "id": "2ea783e1-b3f2-4d21-827d-aaf655c2c1c3",
+  "id": "71ac7b31-39ae-4038-a66b-8c5a27b33da9",
   "prevId": "66973826-ff88-417c-9d1e-83180d60ae1b",
   "version": "7",
   "dialect": "postgresql",
@@ -433,12 +433,6 @@
             "cycle": false
           }
         },
-        "assigned_to": {
-          "name": "assigned_to",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "customer_id": {
           "name": "customer_id",
           "type": "bigint",
@@ -653,7 +647,8 @@
       "name": "upload_method",
       "schema": "public",
       "values": [
-        "sftp"
+        "sftp",
+        "web"
       ]
     },
     "public.user_role": {
