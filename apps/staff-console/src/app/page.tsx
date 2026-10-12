@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ORDER_STATUSES, type Order, type OrderStatus } from '@crimson-copies/shared';
-import { ClaimOrderButton } from '../components/ClaimOrderButton';
 import { callOrdersApi } from '../lib/internal-api';
 import { getStaffSession } from '../lib/session';
 
@@ -23,26 +22,24 @@ export default async function QueuePage({ searchParams }: PageProps) {
   const { status: rawStatus, mine } = await searchParams;
   const currentStatus = rawStatus && isOrderStatus(rawStatus) ? rawStatus : undefined;
   const mineActive = mine === '1';
-/*
+  /*
   const apiSearchParams: Record<string, string | undefined> = { status: currentStatus };
   if (mineActive) {
     apiSearchParams.assignedTo = String(session.userId);
   }*/
-const apiSearchParams: Record<string, string | undefined> = {
-  status: currentStatus,
-};
+  const apiSearchParams: Record<string, string | undefined> = {
+    status: currentStatus,
+  };
 
+  if (mineActive) {
+    apiSearchParams.mine = 'true';
+  }
 
-if (mineActive) {
-  apiSearchParams.mine = 'true';
-}
-
-/*
+  /*
 if (mineActive) {
   apiSearchParams.assignedTo = String(session.userId);
 }
 */
-
 
   const result = await callOrdersApi<Order[]>({
     method: 'GET',
@@ -52,7 +49,6 @@ if (mineActive) {
     searchParams: apiSearchParams,
   });
   const orders = Array.isArray(result.body) ? result.body : [];
-
 
   const orderRows = [];
   for (const order of orders) {
@@ -69,29 +65,27 @@ if (mineActive) {
           </span>
         </td>
         <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-        <td> {!order.assignedTo ? <ClaimOrderButton orderId={order.id} /> : null}</td> 
       </tr>,
     );
   }
-
 
   return (
     <>
       <h1>Staff queue</h1>
       <form className="filter-form" method="get">
-  <label>
-    Status
-    <select name="status" defaultValue={currentStatus ?? ""}>
-      <option value="">All</option>
-      {ORDER_STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {s}
-        </option>
-      ))}
-    </select>
-  </label>
-  <button type="submit">Filter</button>
-</form>
+        <label>
+          Status
+          <select name="status" defaultValue={currentStatus ?? ''}>
+            <option value="">All</option>
+            {ORDER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit">Filter</button>
+      </form>
       {orders.length === 0 ? (
         <p className="muted">No orders match this filter.</p>
       ) : (
@@ -104,7 +98,6 @@ if (mineActive) {
                 <th>Qty</th>
                 <th>Status</th>
                 <th>Submitted</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>{orderRows}</tbody>
@@ -114,5 +107,3 @@ if (mineActive) {
     </>
   );
 }
-
-
