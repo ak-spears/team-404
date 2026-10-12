@@ -37,7 +37,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <nav>
             {/* Queue is the staff "home". */}
             <Link href="/">Queue</Link>
-            <Link href="/my-workload">My Workload</Link>
+            <Link href="/board">Board</Link>
+            <Link href="/admin">Admin Page</Link>
           </nav>
           <div className="header-actions">
             <ThemeToggle />
