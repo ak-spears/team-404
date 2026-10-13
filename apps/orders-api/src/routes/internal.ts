@@ -12,7 +12,22 @@ import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
 import { createRequireInternalKey } from '../plugins/internal-auth.js';
 import type { OrdersRepository } from '../repositories/orders-repository.js';
-import { OAuth2Client } from 'google-auth-library';
+import { OAuth2Client, type TokenPayload } from 'google-auth-library';
+
+/** Exchanges a Google OAuth authorization code for a verified ID token payload. */
+async function verifyGoogleIdToken(
+  config: Config,
+  code: string,
+  redirectUri: string,
+): Promise<TokenPayload | undefined> {
+  const oauthClient = new OAuth2Client(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, redirectUri);
+  const { tokens } = await oauthClient.getToken(code);
+  const ticket = await oauthClient.verifyIdToken({
+    idToken: tokens.id_token!,
+    audience: config.GOOGLE_CLIENT_ID,
+  });
+  return ticket.getPayload();
+}
 
 export interface InternalRoutesOptions {
   repository: OrdersRepository;
@@ -154,17 +169,7 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
     }
 
     // Exchange the authorization code for Google's ID token.
-    const oauthClient = new OAuth2Client(
-      options.config.GOOGLE_CLIENT_ID,
-      options.config.GOOGLE_CLIENT_SECRET,
-      parsed.data.redirectUri,
-    );
-    const { tokens } = await oauthClient.getToken(parsed.data.code);
-    const ticket = await oauthClient.verifyIdToken({
-      idToken: tokens.id_token!,
-      audience: options.config.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
+    const payload = await verifyGoogleIdToken(options.config, parsed.data.code, parsed.data.redirectUri);
     if (!payload?.email || !payload.sub) {
       return reply.code(401).send({ error: 'invalid_google_token' });
     }

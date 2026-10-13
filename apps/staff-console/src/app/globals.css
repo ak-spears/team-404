@@ -367,6 +367,28 @@ button:disabled {
   box-shadow: none;
 }
 
+.google-signin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.google-signin-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--canvas);
+}
+
 /* -------------------- Misc -------------------- */
 
 .error {

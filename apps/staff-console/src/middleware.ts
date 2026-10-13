@@ -32,5 +32,7 @@ export const config = {
   // Excludes /api/* -- those are called by client-side fetch() (StatusUpdateForm,
   // OrderFilesList), which silently follows a redirect and would treat the resulting 200 login
   // page as success. API routes handle their own 401 via getStaffSession() instead.
-  matcher: ['/((?!login|logout|api|_next|favicon.ico).*)'],
+  // Excludes /auth/* -- the Google OAuth callback runs before any session cookie exists, so it
+  // would otherwise get redirected straight back to /login before it ever executes.
+  matcher: ['/((?!login|logout|auth|api|_next|favicon.ico).*)'],
 };

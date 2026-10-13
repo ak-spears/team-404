@@ -9,6 +9,8 @@ export interface SessionPayload {
   username: string;
   role: SessionRole;
   iat: number;
+  /** Set after Google login with a non-UA email until the user submits a CWID. */
+  pendingCwid?: boolean;
 }
 
 export const SESSION_COOKIE_NAME = 'cc_session';
@@ -32,7 +34,9 @@ function signaturesMatch(a: string, b: string): boolean {
   return lengthsMatch && isMatch;
 }
 
-export function createSessionCookieValue(payload: Omit<SessionPayload, 'iat'>): string {
+export function createSessionCookieValue(
+  payload: Omit<SessionPayload, 'iat'> & { pendingCwid?: boolean },
+): string {
   const config = loadConfig();
   const full: SessionPayload = { ...payload, iat: Date.now() };
   const payloadB64 = Buffer.from(JSON.stringify(full)).toString('base64url');
@@ -64,12 +68,22 @@ export function verifySessionCookieValue(value: string | undefined): SessionPayl
 
 /**
  * Reads and verifies the session cookie for the current request, requiring role 'staff'.
- * Server Components/Actions/Route Handlers only.
+ * Server Components/Actions/Route Handlers only. Pending-CWID sessions are treated as
+ * signed-out for the rest of the app.
  */
 export async function getStaffSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
-  return session?.role === 'staff' ? session : null;
+  if (!session || session.pendingCwid) return null;
+  return session.role === 'staff' ? session : null;
+}
+
+/** Session that still needs a CWID before it counts as a full login. */
+export async function getPendingCwidSession(): Promise<SessionPayload | null> {
+  const store = await cookies();
+  const payload = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
+  if (!payload?.pendingCwid) return null;
+  return payload;
 }
 
 export function createAdminCookieValue(): string {
