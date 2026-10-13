@@ -101,7 +101,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <h1>Staff sign in</h1>
+      <h1>You&apos;re not signed in</h1>
+      <p className="muted">Sign in with your staff account to see the order queue.</p>
       {error && <p className="error">Invalid username or password.</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />

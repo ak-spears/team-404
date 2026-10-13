@@ -5,6 +5,7 @@ import './globals.css';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { auth0 } from '../lib/auth0';
 import { loadConfig } from '../lib/config';
+import { getAuthenticatedUser } from '../lib/customer-identity';
 import { getSession } from '../lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     localSession?.username ??
     null;
 
+  // Role decides which nav links show; undefined when signed out (or Auth0 can't be matched
+  // to an orders-api user). Only customers get the ordering links -- staff work in the console.
+  const { role } = signedInName ? await getAuthenticatedUser() : { role: undefined };
+  const isCustomer = role === 'customer';
+  const isStaff = role === 'staff';
+
 
   const themeCookie = (await cookies()).get('cc-theme')?.value;
   const theme = themeCookie === 'light' || themeCookie === 'dark' ? themeCookie : undefined;
@@ -41,8 +48,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </a>
           <nav>
             <a href="/">Catalog</a>
-            <a href="/order">Place an order</a>
-            <a href="/orders">My orders</a>
+            {isCustomer && (
+              <>
+                <a href="/order">Place an order</a>
+                <a href="/orders">My orders</a>
+              </>
+            )}
           </nav>
           <div className="header-actions">
             <ThemeToggle />
@@ -53,7 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <form action="/logout" method="post">
                   <button type="submit">Log out</button>
                 </form>
-                <a href={STAFF_CONSOLE_URL}>Staff sign in</a>
+                {isStaff && <a href={STAFF_CONSOLE_URL}>Staff console</a>}
               </span>
             ) : (
               <span className="session-form">
