@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
+  orderAssignmentInputSchema,
   orderCreateInputSchema,
   orderListQuerySchema,
   orderStatusUpdateInputSchema,
@@ -258,6 +259,46 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
 
     return reply.code(201).send({ orderId: order.id, uploadInstructions });
   });
+
+  app.get('/api/staff', { preHandler: requireInternalKey }, async (request, reply) => {
+    if (request.internalUser.role !== 'staff') {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
+    return reply.code(200).send(await options.repository.listStaffMembers());
+  });
+
+  app.patch<{ Params: { id: string } }>(
+    '/api/orders/:id/assignment',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      if (request.internalUser.role !== 'staff') {
+        return reply.code(403).send({ error: 'forbidden' });
+      }
+
+      const orderId = Number(request.params.id);
+      const actorUserId = parseUserId(request.internalUser.id);
+      if (!Number.isInteger(orderId) || orderId <= 0 || actorUserId === undefined) {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+
+      const parsed = orderAssignmentInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+      }
+
+      const updated = await options.repository.assignOrder({
+        orderId,
+        assignedTo: parsed.data.assignedTo,
+        actorUserId,
+      });
+      if (!updated) {
+        return reply.code(404).send({ error: 'order_or_staff_not_found' });
+      }
+
+      return reply.code(200).send(toOrderDto(updated));
+    },
+  );
 
   // staff-console BFF only (X-User-Role: staff required).
   app.patch<{ Params: { id: string } }>(

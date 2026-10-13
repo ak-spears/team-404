@@ -100,6 +100,12 @@ export interface UpdateOrderStatusParams {
   actor: OrderEventActor;
 }
 
+export interface AssignOrderParams {
+  orderId: number;
+  assignedTo: number | null;
+  actorUserId: number;
+}
+
 /** Thrown by `updateOrderStatus` when `status` isn't reachable from the order's current status. */
 export class InvalidStatusTransitionError extends Error {
   constructor(
@@ -120,6 +126,7 @@ export interface OrderFileRecord {
 }
 
 export interface OrdersRepository {
+  listStaffMembers(): Promise<Array<{ id: number; username: string }>>;
   createOrder(params: CreateOrderParams): Promise<CreateOrderResult>;
   getOrderById(id: number): Promise<OrderRecord | null>;
   getOrderWithCustomerById(id: number): Promise<OrderWithCustomer | null>;
@@ -155,6 +162,7 @@ export interface OrdersRepository {
   setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
 
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
+  assignOrder(params: AssignOrderParams): Promise<OrderRecord | null>;
 
   /** Generic append-only audit trail write (order_events). */
   recordEvent(
@@ -196,6 +204,14 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
   }
 
   return {
+    async listStaffMembers() {
+      return db
+        .select({ id: users.id, username: users.username })
+        .from(users)
+        .where(eq(users.role, 'staff'))
+        .orderBy(users.username);
+    },
+
     async createOrder(params) {
       const priceCents = calculatePriceCents(params.serviceType, params.quantity);
       const plaintextPassword = generateUploadPassword();
@@ -694,6 +710,42 @@ if (filter.assignedTo !== undefined) {
       return { userId: user.id, username: user.username, role: user.role };
     },
 
+    async assignOrder(params) {
+      return db.transaction(async (tx) => {
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        if (!order) return null;
+
+        if (params.assignedTo !== null) {
+          const [staffMember] = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.id, params.assignedTo), eq(users.role, 'staff')))
+            .limit(1);
+          if (!staffMember) return null;
+        }
+
+        if (order.assignedTo === params.assignedTo) return order;
+
+        await tx
+          .update(orders)
+          .set({ assignedTo: params.assignedTo, updatedAt: new Date() })
+          .where(eq(orders.id, params.orderId));
+        await tx.insert(orderEvents).values({
+          orderId: params.orderId,
+          eventType: 'assignment_changed',
+          actor: 'staff',
+          payloadJson: {
+            from: order.assignedTo,
+            to: params.assignedTo,
+            assignedBy: params.actorUserId,
+          },
+        });
+
+        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        return updated ?? null;
+      });
+    },
+
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {
         const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
@@ -703,9 +755,19 @@ if (filter.assignedTo !== undefined) {
           throw new InvalidStatusTransitionError(order.status, params.status);
         }
 
-        const timestampUpdates: Partial<{ pickupReadyAt: Date; completedAt: Date }> = {};
-        if (params.status === 'ready_for_pickup') timestampUpdates.pickupReadyAt = new Date();
-        if (params.status === 'completed') timestampUpdates.completedAt = new Date();
+        const timestampUpdates: Partial<{
+          pickupReadyAt: Date | null;
+          completedAt: Date | null;
+        }> = {};
+        if (params.status === 'ready_for_pickup') {
+          timestampUpdates.pickupReadyAt = new Date();
+          timestampUpdates.completedAt = null;
+        } else if (params.status === 'completed') {
+          timestampUpdates.completedAt = new Date();
+        } else if (params.status !== 'cancelled') {
+          timestampUpdates.pickupReadyAt = null;
+          timestampUpdates.completedAt = null;
+        }
 
         await tx
           .update(orders)

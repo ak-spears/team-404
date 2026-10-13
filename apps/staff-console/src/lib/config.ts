@@ -9,6 +9,14 @@ const DEFAULT_STOREFRONT_URL =
 /** Server-only environment -- nothing here is ever exposed to a Client Component bundle. */
 const envSchema = z.object({
   ORDERS_API_URL: z.string().default('http://127.0.0.1:4000'),
+  STAFF_CONSOLE_ORIGIN: z
+    .string()
+    .url()
+    .default(
+      process.env.NODE_ENV === 'production'
+        ? 'https://team-404.capstone.uamishub.com'
+        : 'http://localhost:3001',
+    ),
   INTERNAL_API_KEY: z.string().min(1, 'INTERNAL_API_KEY is required'),
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // storefront, so a leaked secret for one app can't forge sessions for the other.

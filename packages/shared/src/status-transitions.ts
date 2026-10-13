@@ -21,18 +21,18 @@ export const ORDER_PROGRESS_STATUSES: readonly Exclude<OrderStatus, 'cancelled'>
 );
 
 /**
- * Order lifecycle graph. `cancelled` is reachable from every non-terminal state; `completed` and
- * `cancelled` are terminal.
+ * Order lifecycle graph. Active stages can move to adjacent stages in either direction;
+ * `submitted` can also skip directly to `files_received`. `cancelled` remains terminal.
  */
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   // files_received is reachable directly: orders are created as `submitted`, so a customer
   // who uploads right after ordering never passes through files_pending.
   submitted: ['files_pending', 'files_received', 'cancelled'],
-  files_pending: ['files_received', 'cancelled'],
-  files_received: ['in_production', 'cancelled'],
-  in_production: ['ready_for_pickup', 'cancelled'],
-  ready_for_pickup: ['completed', 'cancelled'],
-  completed: [],
+  files_pending: ['submitted', 'files_received', 'cancelled'],
+  files_received: ['files_pending', 'in_production', 'cancelled'],
+  in_production: ['files_received', 'ready_for_pickup', 'cancelled'],
+  ready_for_pickup: ['in_production', 'completed', 'cancelled'],
+  completed: ['ready_for_pickup'],
   cancelled: [],
 };
 

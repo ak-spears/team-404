@@ -95,18 +95,22 @@ async function login(formData: FormData): Promise<void> {
     redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
   }
 
+  
   const result = await callOrdersApi<LoginResponseBody>({
     method: "POST",
     path: "/internal/auth/verify-credentials",
     body: { username, password },
   });
 
+
   // Same generic error whether the credentials were wrong or they belong to a non-staff
   // account -- doesn't hint at which, so a customer account can't be used to probe for staff
   // usernames.
-  if (result.status !== 200 || result.body.role !== "staff") {
-    redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
-  }
+
+
+ if (result.status !== 200 || result.body.role !== "staff") {
+  redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
+ }
 
   const store = await cookies();
   store.set(
@@ -134,7 +138,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <h1>Staff sign in</h1>
+      <h1>You&apos;re not signed in</h1>
+      <p className="muted">Sign in with your staff account to see the order queue.</p>
       {loginError && <p className="error">{loginError}</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />

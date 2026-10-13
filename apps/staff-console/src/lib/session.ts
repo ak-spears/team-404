@@ -15,6 +15,8 @@ export interface SessionPayload {
 
 export const SESSION_COOKIE_NAME = 'cc_session';
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const ADMIN_COOKIE_NAME = 'cc_admin';
+export const ADMIN_TTL_SECONDS = 4 * 60 * 60;
 
 function sign(payloadB64: string, secret: string): string {
   return createHmac('sha256', secret).update(payloadB64).digest('base64url');
@@ -82,4 +84,28 @@ export async function getPendingCwidSession(): Promise<SessionPayload | null> {
   const payload = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
   if (!payload?.pendingCwid) return null;
   return payload;
+}
+
+export function createAdminCookieValue(): string {
+  const config = loadConfig();
+  const expiresAt = String(Date.now() + ADMIN_TTL_SECONDS * 1000);
+  return `${expiresAt}.${sign(expiresAt, config.SESSION_SECRET)}`;
+}
+
+export function verifyAdminCookieValue(value: string | undefined): boolean {
+  if (!value) return false;
+  const separator = value.lastIndexOf('.');
+  if (separator < 1) return false;
+
+  const expiresAt = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  const expiry = Number(expiresAt);
+  if (!Number.isSafeInteger(expiry) || expiry <= Date.now()) return false;
+
+  return signaturesMatch(signature, sign(expiresAt, loadConfig().SESSION_SECRET));
+}
+
+export async function hasAdminSession(): Promise<boolean> {
+  const store = await cookies();
+  return verifyAdminCookieValue(store.get(ADMIN_COOKIE_NAME)?.value);
 }

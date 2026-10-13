@@ -78,6 +78,12 @@ export const orderStatusUpdateInputSchema = z.object({
 });
 export type OrderStatusUpdateInput = z.infer<typeof orderStatusUpdateInputSchema>;
 
+/** Body of `PATCH /api/orders/:id/assignment`. */
+export const orderAssignmentInputSchema = z.object({
+  assignedTo: z.int().positive().nullable(),
+});
+export type OrderAssignmentInput = z.infer<typeof orderAssignmentInputSchema>;
+
 /** Query of `GET /api/orders`. */
 export const orderListQuerySchema = z.object({
   status: orderStatusSchema.optional(),
