@@ -6,6 +6,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { auth0 } from '../lib/auth0';
 import { loadConfig } from '../lib/config';
 import { getSession } from '../lib/session';
+import Link from 'next/dist/client/link';
 
 export const dynamic = 'force-dynamic';
 
