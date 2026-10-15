@@ -13,9 +13,9 @@ Where your three repos differ, the guide says so in a **▶ Your repo** box. Whe
 
 1. **You never run `kubectl`.** Not for deploying, debugging, or "just checking". The platform is designed so that you cannot need it. Everything below uses git, GitHub Actions, the ArgoCD web UI, the Harbor web UI, the DB console, and the browser. (Local `docker` is fine; that is your laptop, not the cluster.)
 2. **If a change is not in your repo, it does not exist.** Nobody hand-edits a running thing. If it is wrong, you fix the file and merge.
-3. **The VM keeps serving until the replacement is proven.** Nothing in PRs 1–7 may change what the VM does. You will not delete `virtualmachine.yaml` until PR 10.
+3. **The VM keeps serving until the replacement is proven.** Nothing in PRs 1–8 may change what the VM does. You will not delete `virtualmachine.yaml` until PR 11.
 4. **One small PR at a time, each independently reviewable and revertable.** Each PR below says what it changes, why, how you *observe* that it worked, and what must not regress.
-5. **Do not touch `.devops/chart/` (the VM chart) until PR 10.** Section 5 explains why this is more dangerous than it looks.
+5. **Do not touch `.devops/chart/` (the VM chart) until PR 11.** Section 5 explains why this is more dangerous than it looks.
 
 ---
 
@@ -37,7 +37,7 @@ Your VM today is a pet that happens to be described in git (`cloud-init.yaml`) �
 | `deploy/vm/Caddyfile` — `reverse_proxy 127.0.0.1:3000` | an `Ingress` (rules) + one `Service` per app (the stable address) |
 | `127.0.0.1:4000` / `127.0.0.1:4100` (loopback, "internal only") | `http://<app>-orders-api` (a ClusterIP `Service`, no Ingress rule = internal only) |
 | MySQL installed natively by cloud-init | the platform's MariaDB; you get a schema + user per environment |
-| MinIO installed natively by cloud-init | a MinIO `Deployment` + `PersistentVolumeClaim` in your own namespace (PR 5) |
+| MinIO installed natively by cloud-init | a MinIO `Deployment` + `PersistentVolumeClaim` in your own namespace (PR 6) |
 | `cloud-init.yaml` injecting keys and packages | a `Dockerfile` (packages) + `ExternalSecret` (keys) |
 | SSH / web console into the box to debug | ArgoCD pod logs (web UI), Grafana, the DB console |
 | One namespace, `<team>-vm-prod` | Three: `<team>-dev`, `<team>-staging`, `<team>-prod` |
@@ -58,7 +58,7 @@ Read this table against your own repo before you start. The VM runs more than th
 | `staff-console` (Next.js, `basePath: '/staff'`) | systemd `cc-staff-console`, loopback | 3001 | Deployment + Service + Ingress `/staff` |
 | `notify` (Fastify, a **stub** — sends no email) | systemd `cc-notify`, loopback | 4100 | Deployment + internal Service |
 | MySQL | native `mysql-server` | 3306 | platform MariaDB (auto-provisioned) |
-| MinIO (order file uploads) | native binary | 9000 | Deployment + PVC (PR 5) |
+| MinIO (order file uploads) | native binary | 9000 | Deployment + PVC (PR 6) |
 | Caddy | native, `:80` | 80 | the platform's Traefik, driven by your Ingress |
 | ttyd web console / SSH / roster-key import | cloud-init | 7681 / 22 | **nothing** — this is VM-only plumbing and it retires |
 
@@ -174,7 +174,7 @@ envFrom:
 Use this on purpose:
 
 - **Pin what must not be overridable** with an explicit `env:` entry. Surfer pins `SHOW_RMP_DIFFICULTY=false` that way so a value sealed in the Secrets tab can't switch it on.
-- **Map one Secret key to a differently-named variable** with `env.valueFrom.secretKeyRef` (the `SESSION_SECRET` case, section 6, PR 4).
+- **Map one Secret key to a differently-named variable** with `env.valueFrom.secretKeyRef` (the `SESSION_SECRET` case, section 6, PR 2).
 - If a Secrets-tab value "doesn't take effect," check whether an explicit `env:` entry in the Deployment is shadowing it before you suspect Vault.
 
 ### 3.5 Promotion is a button, not a branch
@@ -233,18 +233,20 @@ The gate attaches to the Ingress **by name**: it must be named exactly your app 
 
 Your namespaces, Harbor project, Vault role, CI runner access and DB do not appear from a PR in *your* repo. They come from a **`CapstoneTenant` claim** in `UA-MIS/platform-infra` (`tenants/_claims/<team>-<app>.yaml`), which Crossplane expands into `<team>-dev|staging|prod`, the quota/netpols, an Argo CD AppProject and ApplicationSet, a Harbor project and robots, a Vault policy/role, and (with `database: mysql`) a MariaDB schema + user per environment.
 
-You do not have write access to `platform-infra`, and the claim is a human-reviewed PR there. **Today your three teams are *VM tenants*** (`tenants/team-<team>/vm/`, one namespace `<team>-vm-prod`, an Argo CD project that only allows VM kinds). **A VM tenant has no claim.** Ask the owner to:
+**You write that claim yourself, as PR 4.** It is a small file in a different repository (`UA-MIS/platform-infra`), so it needs the fork-and-PR route that PR 4 spells out. **The owner reviews and merges it.** You cannot merge it, and nothing is created until he does. This is deliberate: you learn what a tenant *is* by writing one, and the owner stays the gate on what gets created on the shared cluster.
 
-1. Add a `CapstoneTenant` claim for your team. The one for `surfers`/`surfer` is the model for a team whose repo already exists (the claim does not create your repo). Needed fields: `team`, `appName`, `semester: 2026-fall`, `database: mysql`, `port`. Keep `previewEnabled: false`.
-2. Confirm your GitHub team `UA-MIS/<team>` has you as **members** (outside collaborators get no Argo CD / Harbor / DB-console access).
-3. Ask the owner when to apply it — see the timing in PR 4. Applying it earlier than needed produces red apps for weeks.
-4. At **cutover** (PR 8) and **retirement** (PR 10): coordinate the VM tier going away.
+**Today your three teams are *VM tenants*** (`tenants/team-<team>/vm/`, one namespace `<team>-vm-prod`, an Argo CD project that only allows VM kinds). A VM tenant has **no** `CapstoneTenant` claim; it only has an inert ledger marker in `tenants/_vm-claims/`. Your PR 4 adds a *second, separate* file in a *different* directory. It does not replace or edit anything the VM uses.
 
-> **The owner checks one thing before applying your claim** (you can't): whether a Harbor project named `<team>` already exists from VM onboarding. If the claim's Harbor `Project` is created over an existing project of the same name, it will most likely fail with "already exists" and block the push robot behind it. You'll see this as the claim never finishing and the first CI push waiting for a credential that never arrives. It is not your Dockerfile. The owner's notes cover the fix.
+What still needs the owner, even though you write the claim:
 
-**Your data is a separate question from your namespaces.** Each environment gets a **brand-new, empty MariaDB schema** automatically; the app's own `migrate` init container creates the tables. So you never "migrate the database". You decide what, if anything, is *imported* into it — PR 7 teaches how, per table.
+1. **Merging the claim PR** (PR 4), at a time you agree. Merging it earlier than needed produces red apps for weeks, so say in the PR when you want it merged (before PR 5 merges, not before).
+2. Confirm your GitHub team `UA-MIS/<team>` has you as a **member** (outside collaborators get no Argo CD / Harbor / DB-console access). Your claim names that team; if you are not in it, nothing in the claim can help you.
+3. **At cutover** (PR 9, PR 10) and **retirement** (PR 12): coordinate the VM tier going away. PR 12 is a second pull request you write against `UA-MIS/platform-infra`, and he merges it.
 
-Do not wait on these to start. PRs 1–3 need nothing from the owner.
+> **The owner checks one thing before merging your claim** (you can't): whether a Harbor project named `<team>` already exists from VM onboarding. If the claim's Harbor `Project` is created over an existing project of the same name, it will most likely fail with "already exists" and block the push robot behind it. You'll see this as the claim never finishing and the first CI push waiting for a credential that never arrives. It is not your Dockerfile, and it is not something your claim file can fix. Tell the owner (PR 4 says how).
+
+**Your data is a separate question from your namespaces.** Each environment gets a **brand-new, empty MariaDB schema** automatically; the app's own `migrate` init container creates the tables. So you never "migrate the database". You decide what, if anything, is *imported* into it — PR 8 teaches how, per table.
+Do not wait on the owner to start. PRs 1–3 need nothing from him, and you can write PR 4 as soon as PR 3 is open.
 
 ---
 
@@ -258,10 +260,10 @@ The sequence is built around one constraint: **the VM must keep serving until th
 
 ```
 .devops/
-  components.yaml            # new (PR 4)
-  promotion.yaml             # rewritten in PR 4; prod still points at the VM until PR 8
-  chart/                     # the VM chart. DO NOT TOUCH until PR 10.
-  chart-k8s/                 # new. Everything in PRs 2, 3, 5, 6 goes here.
+  components.yaml            # new (PR 5)
+  promotion.yaml             # rewritten in PR 5; prod still points at the VM until PR 9
+  chart/                     # the VM chart. DO NOT TOUCH until PR 11.
+  chart-k8s/                 # new. Everything in PRs 2, 3, 6, 7 goes here.
     base/        deployments.yaml  services.yaml  ingress.yaml  serviceaccount.yaml
                  configmap.yaml  kustomization.yaml
     overlays/
@@ -272,14 +274,14 @@ The sequence is built around one constraint: **the VM must keep serving until th
 
 > **Why `chart-k8s/` exists — read this before you "tidy" it.** It exists only because the VM's Argo CD app is still reading `chart/` and will `prune` anything that disappears from it. It is not a naming whim and not technical debt to fix early. Moving things into `chart/` while the VM still runs edits the live VM. The rename happens once, in the last PR, after the VM is gone. Anyone who "cleans it up" sooner can take your production down.
 
-`promotion.yaml` is the *only* thing that tells the platform which directory is "dev". Until PR 4 points `dev:` at `chart-k8s`, **nothing in the cluster reads it** — so PRs 2 and 3 are inert by construction and you can review them calmly. In PR 10 you delete the VM chart and `git mv chart-k8s chart`, which gives you exactly the layout `surfer` has.
+`promotion.yaml` is the *only* thing that tells the platform which directory is "dev". Until PR 5 points `dev:` at `chart-k8s`, **nothing in the cluster reads it** — so PRs 2 and 3 are inert by construction and you can review them calmly. In PR 11 you delete the VM chart and `git mv chart-k8s chart`, which gives you exactly the layout `surfer` has.
 
 (This directory trick is a recommendation from this guide, not a platform convention. If the owner would rather retire the VM tier first and let you use `.devops/chart/` directly, the PRs are identical except for the path. Ask before PR 2.)
 
 Two more consequences of reading `promotion.yaml` that you should know:
 
-- **Never run `promote-to-prod` before PR 8.** Until prod points at `chart-k8s`, that workflow rewrites `images[].newTag` in the *VM's* prod overlay.
-- Until PR 8, the container `prod` app will show **red** in Argo CD (it's pointed at VM manifests its project may not deploy). That is expected and harmless. Do not "fix" it by editing the VM overlay.
+- **Never run `promote-to-prod` before PR 9.** Until prod points at `chart-k8s`, that workflow rewrites `images[].newTag` in the *VM's* prod overlay.
+- Until PR 9, the container `prod` app will show **red** in Argo CD (it's pointed at VM manifests its project may not deploy). That is expected and harmless. Do not "fix" it by editing the VM overlay.
 
 ### The PR sequence
 
@@ -288,14 +290,15 @@ Two more consequences of reading `promotion.yaml` that you should know:
 | 1 | Dockerfiles; prove they run locally via `docker-compose.yml` | none | no |
 | 2 | `chart-k8s/base`: Deployments, Services, ConfigMap, ServiceAccount | none (inert) | no |
 | 3 | Ingress + `overlays/dev` + ExternalSecrets | none (inert) | no |
-| — | **Owner applies the claim** | creates namespaces, Harbor, Vault, DB | **yes** |
-| 4 | CI caller + `components.yaml` + `promotion.yaml` — **the switch** | **first deploy to dev** | merged after the claim |
-| 5 | MinIO + database wiring verified in dev | dev gets stateful pieces | no |
-| 6 | `overlays/staging`, `overlays/prod`; first release tag | staging live; prod overlay exists but unused | no |
-| 7 | Data: seed dev/staging, rehearse the import, write the prod procedure | dev/staging get fake data | no |
-| 8 | **Prod comes up beside the VM** on a holding host; real data imported | prod live but unadvertised | **yes** (VM app neutralised first) |
-| 9 | **The flip**: real hostname moves to Kubernetes | **users move** | **yes, same session** |
-| 10 | Retire the VM: delete VM chart + `deploy/vm`; `git mv chart-k8s chart` | VM goes away | **yes** (platform-infra side) |
+| 4 | **Your claim PR in `UA-MIS/platform-infra`** (fork → PR; the owner reviews and merges): `tenants/_claims/<team>-<team>.yaml` | creates namespaces, Harbor, Vault, DB **on merge** | **yes** (he merges it) |
+| 5 | CI caller + `components.yaml` + `promotion.yaml` — **the switch** | **first deploy to dev** | merges after the claim PR (4) has merged |
+| 6 | MinIO + database wiring verified in dev | dev gets stateful pieces | no |
+| 7 | `overlays/staging`, `overlays/prod`; first release tag | staging live; prod overlay exists but unused | no |
+| 8 | Data: seed dev/staging, rehearse the import, write the prod procedure | dev/staging get fake data | no |
+| 9 | **Prod comes up beside the VM** on a holding host; real data imported | prod live but unadvertised | **yes** (VM app neutralised first) |
+| 10 | **The flip**: real hostname moves to Kubernetes | **users move** | **yes, same session** |
+| 11 | Clean the VM out of your repo: delete VM chart + `deploy/vm`; `git mv chart-k8s chart` | none | no |
+| 12 | **Your VM-retirement PR in `UA-MIS/platform-infra`** (fork → PR; the owner reviews and merges): removes the VM marker and tree | **VM and its disk are deleted, irreversibly, on merge** | **yes** (he merges it) |
 
 ---
 
@@ -684,7 +687,7 @@ patches:
       - { op: replace, path: /spec/tls/0/hosts, value: [paper-papas-dev.capstone.uamishub.com] }
 ```
 
-Patch **both** `rules[].host` and `tls[].hosts`, or SNI and routing disagree and you get a certificate error on a host that routes fine. (Replicas stay at the base's `1` in dev; staging and prod patch them in PR 6.)
+Patch **both** `rules[].host` and `tls[].hosts`, or SNI and routing disagree and you get a certificate error on a host that routes fine. (Replicas stay at the base's `1` in dev; staging and prod patch them in PR 7.)
 
 ```yaml
 # .devops/chart-k8s/overlays/dev/app-secret.externalsecret.yaml — declares WHERE, never WHAT
@@ -749,23 +752,126 @@ kustomize build .devops/chart-k8s/overlays/dev | grep -c '^kind: Ingress'     # 
 
 ---
 
-### (Owner step) — apply the claim
+### PR 4 — Your tenant claim, in `UA-MIS/platform-infra`. **This one is in a different repo.**
 
-Ask now, so it's ready when PR 3 is merged. Before it's applied there is nothing for PR 4's CI to push to. See section 4 for what to ask and the two UNKNOWNs. When it lands, **confirm with your own eyes**:
+**Changes.** One new file in `UA-MIS/platform-infra`: `tenants/_claims/<team>-<team>.yaml`. Nothing in your own repo changes.
 
-- ArgoCD shows `paper-papas-dev`, `-staging`, `-prod` apps for your team (they will be red until PR 4/6 — expected).
-- Harbor has a project named `<team>`.
-- The Secrets tab offers dev / staging / prod for your component.
+**Why.** A tenant (your three namespaces, Harbor project, Vault role, database per environment) is *declared* by a file called a `CapstoneTenant` claim, and the platform builds it from that file. You are writing the declaration. Read it as a description of what you want the platform to give you, the same way a Deployment is a description of what you want to run.
+
+**You are not doing anything irregular.** Claims that are not made through the portal wizard have always gone in as an ordinary pull request with a human merge. `surfers-surfer.yaml` says so in its own header: *"This claim goes through a normal PR + human merge instead, same as every other hand-provisioned claim in this directory."* (`tenants/_claims/README.md` describes the portal path, which commits straight to `main` with no PR. Yours is not that path.)
+
+#### Step 1 — Read before you write
+
+In `platform-infra`, read `tenants/_claims/README.md` (it describes what a claim is, which fields exist, and how a tenant is torn down) and then **one plain claim to copy the shape from: `tenants/_claims/mychef-mychef.yaml`.** It is a MySQL tenant with `previewEnabled: false` and no special extras, which is your shape.
+
+**Do not model yours on `surfers-surfer.yaml`.** It is the right file to *cite* for the PR process, and the wrong one to *copy*: it is an unusual claim (a vector-database extension, a hand-patched backend, a long list of known gaps), and most of its comments explain things that do not apply to you. Also skip `curb-curb-web.yaml` (it is Postgres; you are MySQL) and `_example-acme-app.yaml` (a documented sample, not a live claim).
+
+#### Step 2 — The file
+
+| | `paper-papas` | `ss-evan-and-emily` | `team-404` |
+| --- | --- | --- | --- |
+| **File name** (in `tenants/_claims/`) | `paper-papas-paper-papas.yaml` | `ss-evan-and-emily-ss-evan-and-emily.yaml` | `team-404-team-404.yaml` |
+| `metadata.name` | `paper-papas-paper-papas` | `ss-evan-and-emily-ss-evan-and-emily` | `team-404-team-404` |
+| `team` / `appName` / `githubTeam` | `paper-papas` | `ss-evan-and-emily` | `team-404` |
+
+The convention is `<team>-<app>.yaml`. Your team and app are the same word, so the name repeats; that is correct, not a typo. **The file name, minus `.yaml`, must equal `metadata.name`.**
+
+> ⚠ **This is a second claim, in a different directory, from the one your VM already has.** Your VM's marker lives at `tenants/_vm-claims/<team>-<team>.yaml` (same name, other directory). It is an inert ledger entry for the VM, not a real claim. **Do not edit it, do not move it, do not delete it, and do not touch `tenants/team-<team>/`.** Both stay exactly as they are until the final retirement PR (PR 12). Your PR adds **exactly one file**.
+
+The content, shown for `paper-papas` (replace the four `paper-papas` values and `metadata.name` with your own, using the table above):
+
+```yaml
+# Container-tenant claim for the Crimson Copies VM -> Kubernetes migration (PR 4 of the guide).
+# This is a SECOND claim, separate from tenants/_vm-claims/paper-papas-paper-papas.yaml,
+# which is the VM's inert ledger marker and is NOT changed by this PR.
+apiVersion: platform.capstone.uamishub.com/v1alpha1
+kind: CapstoneTenant
+metadata:
+  name: paper-papas-paper-papas            # <team>-<appName>; equals the file name without ".yaml"
+  labels:
+    platform.capstone/team: "paper-papas"
+    platform.capstone/semester: "2026-fall"
+    platform.capstone/component: tenant
+spec:
+  team: "paper-papas"                      # becomes the prefix of your namespaces: paper-papas-dev, -staging, -prod,
+                                           # AND is the GitHub team whose members get Argo CD / DB-console access
+                                           # (the platform binds the group "UA-MIS:<team>"). It must be a real GitHub team.
+  appName: "paper-papas"                   # your app's name: hostnames (paper-papas-dev.capstone...) and image names
+                                           # (paper-papas-orders-api, ...) are built from it
+  semester: "2026-fall"                    # year-first; used to group tenants for end-of-semester cleanup
+  githubTeam: "paper-papas"                # the GitHub team for repo access; same as team for you
+  port: 8080                               # the platform's default container port; your Deployments set their own
+                                           # ports (PR 2), so leave this at 8080
+  previewEnabled: false                    # per-pull-request preview environments: OFF; they do not work on this platform today
+  domain: "capstone.uamishub.com"          # the one domain the platform serves
+  database: "mysql"                        # gives each environment its own empty MariaDB schema + user (see section 4)
+```
+
+Add no other fields. Everything you are not setting has a platform default that is the right one for you.
+
+#### Step 3 — Fork, branch, PR
+
+`UA-MIS/platform-infra` is a **public** repository and you have **read access only**. If you try to push a branch to it directly, GitHub refuses with a permission error, and the message does not explain why. The route is **fork → branch → pull request**:
+
+1. On `https://github.com/UA-MIS/platform-infra`, click **Fork** to make your own copy under your GitHub account.
+2. Clone **your fork**, make a branch, add the one file, and push to your fork:
+
+```bash
+git clone https://github.com/<your-github-username>/platform-infra.git
+cd platform-infra
+git switch -c claim-paper-papas
+# create tenants/_claims/paper-papas-paper-papas.yaml with the content above
+git add tenants/_claims/paper-papas-paper-papas.yaml
+git status
+git commit -m "claims: paper-papas container tenant (CapstoneTenant)"
+git push -u origin claim-paper-papas
+```
+
+(Replace `<your-github-username>` and every `paper-papas`. `git add` the one file by name, not `git add -A`.) `git status` must list **exactly one** new file under `tenants/_claims/`. If it lists anything else, stop and fix that before you commit.
+
+3. GitHub shows a **Compare & pull request** banner on your fork. Open the pull request **into `UA-MIS/platform-infra`, branch `main`**.
+4. In the PR description, say: that this is the container-tenant claim for your VM migration; a link to your PR 3; and that you want it **merged before your PR 5 merges**, not before.
+
+The repository requires one approving review and a passing `make validate` check before it merges. Both are normal. A first pull request from a fork may also sit waiting for the owner to approve the workflow run; that is not a failure, so tell him if the check does not start.
+
+**Nothing happens until the owner merges.** Opening the PR creates nothing. The platform acts on the merge, not on the PR. After it merges, Argo CD syncs the file and Crossplane builds the tenant from it, which is several steps one after another, so expect minutes rather than seconds.
+
+#### Step 4 — How you know it worked (no `kubectl`)
+
+After the merge, wait, then check each of these with your own eyes. All of them are web pages.
+
+| Check | Where | What you should see |
+| --- | --- | --- |
+| Your three environments exist | **Argo CD** | apps `<team>-dev`, `<team>-staging`, `<team>-prod` for your team. They will be **red** or empty until PR 5 and PR 7. Red is expected; *absent* is the problem. Each app's details name its destination namespace (`<team>-dev` etc.). **Count them: three.** |
+| The project that fences your apps | **Argo CD**, open any of those apps | the **Project** field in its details reads `<team>` |
+| Your registry project | **Harbor** | a project named `<team>` |
+| The Vault role works | **The Process → your component → Secrets tab** | the tab offers **dev / staging / prod**, and saving a value in one of them succeeds |
+| The per-environment database exists | **DB console**, `https://<team>-dev-db.capstone.uamishub.com/` (**UNKNOWN until you see it; confirm the real host here**) | it loads behind your login and shows an empty schema named `<team with - as _>_dev` |
+| You did not break the VM | the VM's app on **Argo CD**, and your real hostname | `<team>-vm-prod` is still there, unchanged, and `curl -sI https://<team>.capstone.uamishub.com/ \| head -1` still returns the VM's `200` |
+
+The namespaces, the Vault role and the database are created by the platform; you see them only through these pages. If a page lists the thing, it exists. If a page is empty, you have not shown that the thing is missing until you have checked you are logged in and in the right team.
+
+#### Step 5 — If it does not come up
+
+If, after the merge and a reasonable wait (about half an hour is a sensible rule of thumb; that is a guess, not a measured number), any row in the table above is missing: **do not try to debug Crossplane, and do not edit the claim to "see if it helps".** You cannot see inside it, and a second PR will not tell you more. Tell the owner, and bring:
+
+- the link to your merged PR 4,
+- which rows of the table are present and which are missing,
+- and the Argo CD app link for whichever `<team>-…` app does exist.
+
+The two known causes (an existing Harbor project, and your GitHub team membership) are the owner's to fix and are covered in section 4.
+
+**Must not regress.** The VM keeps serving. `git diff --stat` on your PR shows **one added file** and nothing else. Your own repo is untouched.
 
 ---
 
-### PR 4 — CI builds and pushes your images; promotion map. **This is the switch.**
+### PR 5 — CI builds and pushes your images; promotion map. **This is the switch.**
 
 **Changes.**
 1. Replace `.github/workflows/build-and-push.yaml` with the caller from 3.2.
 2. Add `.devops/components.yaml`.
 3. Rewrite `.devops/promotion.yaml`.
-4. Leave `.devops/ci/validate-vm.py` where it is. Only the old workflow called it, so after step 1 it is dead but harmless; PR 10 removes it. (Side effect: the VM chart is no longer validated in CI. That is fine because you don't touch it.)
+4. Leave `.devops/ci/validate-vm.py` where it is. Only the old workflow called it, so after step 1 it is dead but harmless; PR 11 removes it. (Side effect: the VM chart is no longer validated in CI. That is fine because you don't touch it.)
 
 **Why.** Everything so far was inert. This PR makes the platform notice you: it builds the images and, for the first time, `promotion.yaml` points the platform at your container chart.
 
@@ -823,7 +929,7 @@ environments:
   prod:
     trigger: "manual:promote-to-prod"
     tagConvention: "semver"
-    overlay: ".devops/chart/overlays/prod"        # <-- STILL THE VM until PR 8. Do not change it.
+    overlay: ".devops/chart/overlays/prod"        # <-- STILL THE VM until PR 9. Do not change it.
     gate: auto
 ```
 
@@ -831,7 +937,7 @@ environments:
 
 Also delete the `layout: vm` line from `promotion.yaml` (it's gone from the new file above). The VM's ApplicationSet reads the same file and only needs `environments.prod.overlay` and `.gate`, both of which are still there.
 
-**Merge order.** The claim must be applied **before** this merges. The build waits up to ~5 minutes for the platform to inject the Harbor push credential and then fails with *"Harbor push credential still not injected"* — that message means "the claim isn't applied yet / hasn't finished", not "your Dockerfile is wrong."
+**Merge order.** Your claim PR (PR 4) must be **merged before** this one. The build waits up to ~5 minutes for the platform to inject the Harbor push credential and then fails with *"Harbor push credential still not injected"* — that message means "the claim PR hasn't merged yet / hasn't finished", not "your Dockerfile is wrong."
 
 **Verify — real observations, in this order.** A green check on the PR proves almost nothing here.
 
@@ -843,13 +949,13 @@ Also delete the `layout: vm` line from `promotion.yaml` (it's gone from the new 
 6. **Pod logs** (Argo CD → pod → Logs): `orders-api`'s `migrate` init container printed `Migrations applied.`; the app printed its listen line.
 7. **Exercise the endpoint**, in a **logged-in browser** (dev is SSO-gated; `curl` gets a 302 to login, which is not your app): `https://paper-papas-dev.capstone.uamishub.com/` renders the storefront, and the catalog or order list loads — that page can only render if `storefront → orders-api → MariaDB` works end to end.
 
-**Expected red.** The `paper-papas-staging` and `-prod` Argo CD apps stay red (staging has no overlay yet; prod points at VM manifests). That's expected until PRs 6–7.
+**Expected red.** The `paper-papas-staging` and `-prod` Argo CD apps stay red (staging has no overlay yet; prod points at VM manifests). That's expected until PRs 7–8.
 
 **Must not regress.** The VM still answers at `paper-papas.capstone.uamishub.com`. After the merge, `curl -sI https://paper-papas.capstone.uamishub.com/ | head -1` still returns the VM's `200`. If the VM's Argo CD app (`paper-papas-vm-prod`) goes OutOfSync, stop and ask.
 
 ---
 
-### PR 5 — Stateful pieces: MinIO, and proving the database
+### PR 6 — Stateful pieces: MinIO, and proving the database
 
 **Changes.** Add a MinIO `Deployment` + `PersistentVolumeClaim` + `Service` to `chart-k8s/base`, and MinIO env to the ConfigMap/Secret.
 
@@ -926,7 +1032,7 @@ A `Service` named `paper-papas-object-store` (port 80 → `http`) completes it. 
 
 ---
 
-### PR 6 — Staging and prod overlays; the first release
+### PR 7 — Staging and prod overlays; the first release
 
 **Changes.** Copy `overlays/dev` to `overlays/staging` and `overlays/prod` and change: `namespace`, the Vault paths (`tenants/<team>/staging/...`), the `database` name suffix (`..._staging`, `..._prod`), host patches, image tags, replicas. Add `pdb.yaml` to staging and prod.
 
@@ -962,7 +1068,7 @@ Prod must hold its **own secret values**, set in the Secrets tab for the `prod` 
 
 Add the `staging` and `prod` entries to `images:` with the sentinel `v0.0.0` — CI's first dev build seeds the real tag into staging and prod so they come up green instead of `ImagePullBackOff`.
 
-Now do the release. In PR 6's merge, then:
+Now do the release. In PR 7's merge, then:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
@@ -979,7 +1085,7 @@ git tag v0.1.0 && git push origin v0.1.0
 
 ---
 
-### PR 7 — Data: seed dev and staging, rehearse the import, write the prod procedure
+### PR 8 — Data: seed dev and staging, rehearse the import, write the prod procedure
 
 **Changes.** Add `db/seed/` (a small, idempotent `seed.sql` of *fake* data) and `docs/data-migration.md` (your dump/import procedure and the table list with your reasoning). No chart change. Run the seed into dev and staging; run the **rehearsal** described below.
 
@@ -1040,12 +1146,12 @@ If an INSERT fails, the error names the table and row. Typical causes: a `JSON` 
 
 ---
 
-### PR 8 — Prod comes up beside the VM, on a holding host, and receives the data
+### PR 9 — Prod comes up beside the VM, on a holding host, and receives the data
 
 **This PR deploys prod. It needs the owner at the same time.** The VM keeps serving the real hostname throughout; users notice nothing yet.
 
 **Before you open it (all of these):**
-- Staging has run your release (`0.1.0`) and you've exercised it end to end. PR 7's rehearsal passed.
+- Staging has run your release (`0.1.0`) and you've exercised it end to end. PR 8's rehearsal passed.
 - **The owner has neutralised the VM's Argo CD app.** It reads `promotion.yaml`'s `prod.overlay`, which this PR repoints. With `prune: true` it must not be allowed to sync your new overlay. (Mechanism is the owner's call; the AppProject mismatch will likely refuse the sync but you must not rely on that.) **Do not open this PR until the owner says the VM app is safe.**
 - A holding host and a maintenance window are agreed: a short period when the VM's data stops changing.
 
@@ -1055,7 +1161,7 @@ If an INSERT fails, the error names the table and row. Typical causes: a `JSON` 
 
 Then, in this order:
 1. **Freeze the VM's writes** (maintenance notice; stop `cc-storefront` and `cc-staff-console` on the VM, leave MySQL up).
-2. Run the real dump (PR 7 procedure) and copy MinIO objects.
+2. Run the real dump (PR 8 procedure) and copy MinIO objects.
 3. Merge this PR, then **Actions → promote-to-prod → from: staging**. Prod pods start; `migrate` creates the empty tables.
 4. Import the dump through the **prod** DB console; mirror the files into prod MinIO.
 
@@ -1067,7 +1173,7 @@ Then, in this order:
 
 ---
 
-### PR 9 — The flip: the real hostname moves to Kubernetes
+### PR 10 — The flip: the real hostname moves to Kubernetes
 
 **Needs the owner, same session.** The owner removes the VM's Ingress (or the whole VM Argo CD app) so two Ingresses don't claim one hostname from different namespaces. **Do not delete the VM.** Keep it stopped as your rollback.
 
@@ -1085,7 +1191,7 @@ Then, in this order:
 
 ---
 
-### PR 10 — Retire the VM (last, only after prod is verified)
+### PR 11 — Clean the VM out of your own repo (only after prod is verified)
 
 Run prod on Kubernetes for a period you can defend (a week of real use is a reasonable bar), then:
 
@@ -1097,9 +1203,79 @@ Run prod on Kubernetes for a period you can defend (a week of real use is a reas
 
 Rebase right before merging: CI's `bump-dev` commits touch `overlays/dev/kustomization.yaml` and will conflict with a rename.
 
-**Then the owner**, in `platform-infra`, removes the VM tier (`git rm` of `tenants/team-<team>/` and `tenants/_vm-claims/<team>-<team>.yaml`). On merge, Argo CD prunes the VM project, ApplicationSet and `<team>-vm-prod` namespace, and **namespace GC deletes the VM and its root-disk PVC permanently**. The VM's MySQL and MinIO data go with it. That is why this PR is last, and why you verified the data in PR 8.
+This PR is in your own repo only and deletes nothing that is running (the owner already neutralised the VM's Argo CD app before PR 9): the VM and its disk are removed by PR 12, which comes after it. That is why PR 12 is last, and why you verified the data in PR 9.
 
-**Verify.** Argo CD lists exactly three apps for your team, all **Synced** and healthy: `-dev`, `-staging`, `-prod`; no `-vm-prod`. A push to `main` still produces a `ci: bump dev images` commit pointing at `chart/overlays/dev`. `promote-to-prod` still works (try it when nothing changed — it should say so and exit green).
+**Verify.** Argo CD still lists your `-dev`, `-staging` and `-prod` apps, all **Synced** and healthy (the VM's `-vm-prod` is still listed until PR 12). A push to `main` still produces a `ci: bump dev images` commit pointing at `chart/overlays/dev`. `promote-to-prod` still works (try it when nothing changed — it should say so and exit green).
+
+---
+
+### PR 12 — Remove the VM tenant in `UA-MIS/platform-infra`. **Irreversible. This is the last PR.**
+
+This is the second PR that goes to `UA-MIS/platform-infra` (PR 4 was the first), by the same route: **fork → branch → pull request**, with the owner reviewing and merging. Everything about forking in PR 4, Step 3 applies unchanged.
+
+**Changes.** One PR that removes **both** of these, and nothing else:
+
+| | `paper-papas` | `ss-evan-and-emily` | `team-404` |
+| --- | --- | --- | --- |
+| the VM's ledger marker (a file) | `tenants/_vm-claims/paper-papas-paper-papas.yaml` | `tenants/_vm-claims/ss-evan-and-emily-ss-evan-and-emily.yaml` | `tenants/_vm-claims/team-404-team-404.yaml` |
+| the VM tenant's tree (a directory) | `tenants/team-paper-papas/` | `tenants/team-ss-evan-and-emily/` | `tenants/team-team-404/` |
+
+(The directory holds `README.md`, `vm/README.md`, `vm/applicationset-vm.yaml`, `vm/appproject-vm.yaml` and `vm/namespaces/vm-prod.yaml`. Note the doubled name for `team-404`: the directory is `team-` followed by the team name.)
+
+```bash
+# after: fork, clone your fork, and `git switch -c retire-vm-paper-papas` as in PR 4
+git rm tenants/_vm-claims/paper-papas-paper-papas.yaml
+git rm -r tenants/team-paper-papas
+git status
+```
+
+`git status` must show **exactly the one marker file and the five files under that directory as deleted, and nothing else.**
+
+> ⚠ **Do not touch `tenants/_claims/<team>-<team>.yaml`.** That is the container claim *you wrote in PR 4*. It is in a different directory from the VM marker (`_claims/`, not `_vm-claims/`) and has the same file name. Removing it tears down your new dev, staging and prod. Read the path before every `git rm`.
+
+**Why both, and why in one PR.** This is the documented teardown contract in `tenants/_vm-claims/README.md`: *"Tearing down a VM tenant = a PR that `git rm`s **both** the marker **and** its `teardownPath`."* Removing only the directory leaves a marker pointing at nothing. Removing only the marker leaves a live VM that the platform can no longer list or tear down. Either leaves the tenant half-removed.
+
+**What happens on merge** (also from that README):
+
+1. the platform drops the `tenant-<team>` bootstrap Argo CD app;
+2. Argo CD prunes the VM's AppProject, its ApplicationSet (`<team>-vm-envs`) and the `<team>-vm-prod` namespace;
+3. namespace cleanup deletes the VM and its disk, and **reclaims the disk's storage**. The disk's storage class is set to *delete* on release.
+
+**This cannot be undone, and it was built that way.** The README says why: the VM's disk is protected from accidental pruning inside Argo CD (`Prune=false`), and it is **not** protected by a storage-level "retain" setting, *"precisely so teardown still reclaims the disk."* There is no recycle bin behind this PR. The VM, everything on its disk (its MySQL data, its MinIO files, anything you ever edited by hand) and its disk are gone when the sync completes. The owner cannot bring them back.
+
+#### Before you open it: tick every box
+
+Do not open this PR until each of these is true. Tick them with evidence, not with memory.
+
+- [ ] **Prod is serving correctly from Kubernetes at the real hostname.** PR 10 is done and verified. `curl -sI https://<team>.capstone.uamishub.com/ | head -1` returns `200`, with no Caddy `Server:` header, and you have placed a real order through it today.
+- [ ] **You have run Kubernetes prod for a period you can defend** (a week of real use is a reasonable bar).
+- [ ] **The data you wanted is in the new prod, and you confirmed it by reading rows back**, not because the import said it succeeded. Per-table row counts match what you wrote down in PR 9, and you spot-checked specific rows in the prod DB console.
+- [ ] **Every file you care about is in the new object store.** The object count in the new MinIO matches the VM's, and you downloaded a real file through the app.
+- [ ] **Nothing still points at the VM.** The real hostname, the Stripe webhook, the Clerk allowed origins (`paper-papas`), any bookmark or script, and any teammate's habit of using the old console.
+- [ ] **You have anything from the VM that exists nowhere else**: a copy of the final dump kept somewhere private and out of git, and any notes or files you pulled off by hand.
+- [ ] **Your whole team knows today is the day.** Say it in your team chat before the owner merges.
+
+If any box is unticked, close the PR. A VM you delete a week late costs nothing. A VM deleted a week early cannot be recovered.
+
+#### Open the PR and let the owner decide
+
+The description says: this is the VM-tenant retirement for your team; a link to your merged PR 10; and, for each box above, one line of the evidence. **The owner reviews the evidence before he merges and will not merge on a promise.** Do not merge-ping him; he picks the moment.
+
+(There is also an admin-only teardown page in The Process that reads the same `_vm-claims/` markers. Students cannot use it. If the owner removes your VM that way instead of merging your PR, the outcome is the same, so don't be confused if he does.)
+
+#### How you know it worked (no `kubectl`)
+
+Give it some minutes after the merge, then check:
+
+| Check | Where | What you should see |
+| --- | --- | --- |
+| The VM's app is gone | **Argo CD** | no `<team>-vm-prod`. **Exactly three apps** remain for your team: `-dev`, `-staging`, `-prod`, all **Synced** and healthy. Write the number 3 down first. |
+| Prod did not notice | the real hostname | `curl -sI https://<team>.capstone.uamishub.com/ \| head -1` is still `200`; a real order completes in a browser |
+| Your new tenant is intact | **Harbor**, **The Process → Secrets tab**, **DB console** | the `<team>` project and its images, the dev/staging/prod environments, and your data are all still there |
+
+You cannot see the VM's namespace or disk directly. Their disappearance is shown only by the VM app leaving Argo CD and the old console no longer answering. If the VM app is still listed after a reasonable wait, or any row in the table above is not what it says, **do not try to fix it yourself.** Tell the owner what you see and bring the PR link and the Argo CD app link.
+
+**Must not regress.** `https://<team>.capstone.uamishub.com/` keeps answering, and your three container environments are untouched. The PR touches nothing in your own app repo.
 
 ---
 
@@ -1138,7 +1314,7 @@ Three habits: **write the expected number before you look** (pods, tags, rows); 
 | dev/staging reachable without login | the Ingress isn't named exactly your app name |
 | Secrets-tab value "ignored" | an explicit `env:` entry shadows it, or the pod hasn't restarted since you sealed it |
 | `bump-dev` fails: "overlay kustomization not found" | `promotion.yaml` `overlay:` path doesn't match a real directory |
-| Build: "Harbor push credential still not injected" | the claim isn't applied yet / still provisioning (section 4) — not your Dockerfile |
+| Build: "Harbor push credential still not injected" | your claim PR (PR 4) isn't merged yet, or is still provisioning (section 4) — not your Dockerfile |
 | Two ArgoCD apps fighting over an object | you shipped a `secretstore.yaml`; delete it, the platform owns it |
 
 When stuck, bring the Argo CD app link, the CI run link, and the exact error — not a description.
