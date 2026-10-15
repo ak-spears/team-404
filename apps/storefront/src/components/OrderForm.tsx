@@ -1,14 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
+  calculatePriceCents,
   PAYMENT_METHODS,
+  PRICING_TABLE_CENTS,
   SERVICE_TYPES,
   type PaymentMethod,
   type ServiceType,
 } from '@crimson-copies/shared';
-import { ACCEPTED_EXTENSIONS, MAX_UPLOAD_BYTES, uploadErrorMessage, uploadOrderFile } from '../lib/order-files';
+import { MAX_UPLOAD_BYTES, uploadErrorMessage, uploadOrderFile } from '../lib/order-files';
+import { formatPrice, PAYMENT_LABELS, SERVICE_DETAILS } from '../lib/services';
+import { ChoiceGroup } from './ChoiceGroup';
+import { FileDrop } from './FileDrop';
+import { FormStep } from './FormStep';
+import { QuantityStepper } from './QuantityStepper';
 
 /** The upload credential is not in this response -- the BFF keeps it in an HttpOnly cookie. */
 interface OrderCreateResponse {
@@ -23,14 +30,38 @@ function isOrderCreateResponse(value: unknown): value is OrderCreateResponse {
   );
 }
 
+// Fixed-price services first; quoted ones (department jobs) last.
+const SERVICE_CHOICES = [...SERVICE_TYPES]
+  .sort((a, b) => Number(PRICING_TABLE_CENTS[a] === null) - Number(PRICING_TABLE_CENTS[b] === null))
+  .map((type) => {
+    const cents = PRICING_TABLE_CENTS[type];
+    return {
+      value: type,
+      title: SERVICE_DETAILS[type].title,
+      meta:
+        cents === null ? 'Quoted per job' : `${formatPrice(cents)} ${SERVICE_DETAILS[type].unit}`,
+    };
+  });
+
+const PAYMENT_CHOICES = PAYMENT_METHODS.map((method) => ({
+  value: method,
+  title: PAYMENT_LABELS[method],
+}));
+
+interface OrderFormProps {
+  initialService?: ServiceType;
+  defaultName?: string;
+  defaultEmail?: string;
+}
+
 /** The order form. Submits to the storefront's own BFF route. */
-export function OrderForm() {
+export function OrderForm({ initialService, defaultName = '', defaultEmail = '' }: OrderFormProps) {
   const router = useRouter();
-  const [serviceType, setServiceType] = useState<ServiceType>(SERVICE_TYPES[0]);
+  const [serviceType, setServiceType] = useState<ServiceType>(initialService ?? SERVICE_TYPES[0]);
   const [quantity, setQuantity] = useState(1);
   const [specNotes, setSpecNotes] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerName, setCustomerName] = useState(defaultName);
+  const [customerEmail, setCustomerEmail] = useState(defaultEmail);
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS[0]);
   const [submitting, setSubmitting] = useState(false);
@@ -42,14 +73,16 @@ export function OrderForm() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
 
-  function handleFileChosen(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0] ?? null;
+  const service = SERVICE_DETAILS[serviceType];
+  const unitCents = PRICING_TABLE_CENTS[serviceType];
+  const totalCents = calculatePriceCents(serviceType, quantity);
+
+  function handleFileChosen(file: File | null): void {
     // Checked here as well as server-side so an oversized file is rejected while the customer
     // is still filling the form, not after the order is already placed.
     if (file && file.size > MAX_UPLOAD_BYTES) {
       setFileError(uploadErrorMessage(413));
       setPendingFile(null);
-      event.target.value = '';
       return;
     }
     setFileError(null);
@@ -114,102 +147,150 @@ export function OrderForm() {
 
   if (placedOrderId !== null) {
     return (
-      <div>
-        <h2>Order #{placedOrderId} submitted</h2>
+      <section className="order-placed" role="status">
+        <span className="order-placed-check" aria-hidden>
+          &#10003;
+        </span>
+        <h2>Order #{placedOrderId} placed</h2>
         {uploadPercent !== null ? (
-          <p className="upload-progress" role="status">
-            <progress value={uploadPercent} max={100} /> Uploading {pendingFile?.name}...{' '}
-            {uploadPercent}%
-          </p>
+          <div className="upload-progress">
+            <progress value={uploadPercent} max={100} />
+            Uploading {pendingFile?.name}&hellip; {uploadPercent}%
+          </div>
         ) : (
-          <p className="muted" role="status">
-            Opening your order...
-          </p>
+          <p className="muted">Opening your order&hellip;</p>
         )}
-      </div>
+      </section>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <label>
-        Name
-        <input
-          type="text"
-          required
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-        />
-      </label>
-      <label>
-        Email
-        <input
-          type="email"
-          required
-          value={customerEmail}
-          onChange={(e) => setCustomerEmail(e.target.value)}
-        />
-      </label>
-      <label>
-        Phone (optional)
-        <input
-          type="tel"
-          value={customerPhone}
-          onChange={(e) => setCustomerPhone(e.target.value)}
-        />
-      </label>
-      <label>
-        Service type
-        <select
-          value={serviceType}
-          onChange={(e) => setServiceType(e.target.value as ServiceType)}
-        >
-          {SERVICE_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Quantity
-        <input
-          type="number"
-          min={1}
-          required
-          value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
-        />
-      </label>
-      <label>
-        Spec notes (optional)
-        <textarea value={specNotes} onChange={(e) => setSpecNotes(e.target.value)} rows={4} />
-      </label>
-      <label className="file-picker">
-        File to print (optional)
-        <input type="file" accept={ACCEPTED_EXTENSIONS} onChange={handleFileChosen} />
-        <span className="muted">
-          Documents or images, up to 50 MB. You can add more files after ordering.
-        </span>
-      </label>
-      {fileError && <p className="error">{fileError}</p>}
-      <label>
-        Payment method
-        <select
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-        >
-          {PAYMENT_METHODS.map((method) => (
-            <option key={method} value={method}>
-              {method}
-            </option>
-          ))}
-        </select>
-      </label>
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={submitting}>
-        {submitting ? 'Submitting...' : 'Submit order'}
-      </button>
-    </form>
+    <section className="order-builder">
+      <form className="order-form" onSubmit={handleSubmit}>
+        <div className="order-steps">
+          <FormStep step={1} title="What are we printing?">
+            <ChoiceGroup
+              name="serviceType"
+              choices={SERVICE_CHOICES}
+              value={serviceType}
+              onChange={setServiceType}
+            />
+          </FormStep>
+
+          <FormStep step={2} title="Details">
+            <QuantityStepper
+              label={service.quantityLabel}
+              value={quantity}
+              onChange={setQuantity}
+            />
+            <label>
+              <span>
+                Notes for staff <span className="optional">optional</span>
+              </span>
+              <textarea
+                value={specNotes}
+                onChange={(e) => setSpecNotes(e.target.value)}
+                rows={3}
+                maxLength={4000}
+                placeholder={service.notesHint}
+              />
+            </label>
+            <div className="field">
+              <span className="field-label">
+                File to print <span className="optional">optional</span>
+              </span>
+              <FileDrop
+                file={pendingFile}
+                error={fileError}
+                onFile={handleFileChosen}
+                onRejected={setFileError}
+              />
+            </div>
+          </FormStep>
+
+          <FormStep step={3} title="Contact" hint="We'll email you when it's ready for pickup.">
+            <div className="field-grid">
+              <label>
+                Name
+                <input
+                  type="text"
+                  required
+                  autoComplete="name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                />
+              </label>
+              <label>
+                <span>
+                  Phone <span className="optional">optional</span>
+                </span>
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                />
+              </label>
+            </div>
+          </FormStep>
+
+          <FormStep step={4} title="Payment">
+            <ChoiceGroup
+              name="paymentMethod"
+              variant="pills"
+              choices={PAYMENT_CHOICES}
+              value={paymentMethod}
+              onChange={setPaymentMethod}
+            />
+          </FormStep>
+        </div>
+
+        <aside className="order-summary">
+          <h2>Your order</h2>
+          <SummaryLine label="Service" value={service.title} />
+          <SummaryLine
+            label={service.quantityLabel}
+            value={unitCents === null ? quantity : `${quantity} × ${formatPrice(unitCents)}`}
+          />
+          <SummaryLine label="File" value={pendingFile?.name ?? 'Add later'} />
+          <SummaryLine label="Payment" value={PAYMENT_LABELS[paymentMethod]} />
+          <div className="summary-total">
+            <span>{totalCents === null ? 'Price' : 'Estimated total'}</span>
+            <strong>{totalCents === null ? 'Quoted' : formatPrice(totalCents)}</strong>
+          </div>
+          {totalCents === null && (
+            <p className="summary-note">Staff will price this job individually.</p>
+          )}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Placing order…' : 'Place order'}
+          </button>
+          <p className="summary-note">You can add more files after ordering.</p>
+        </aside>
+      </form>
+    </section>
+  );
+}
+
+function SummaryLine({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="summary-line">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }

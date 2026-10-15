@@ -69,9 +69,10 @@ export function OrderFilesList({ orderId }: { orderId: number }) {
         <li key={file.id}>
           <a href={file.url} target="_blank" rel="noreferrer">
             {file.originalFilename}
-          </a>{' '}
+          </a>
           <span className="muted">
-            ({formatBytes(file.sizeBytes)}, uploaded {new Date(file.uploadedAt).toLocaleString()})
+            {formatBytes(file.sizeBytes)} &middot; uploaded{' '}
+            {new Date(file.uploadedAt).toLocaleString()}
           </span>
         </li>
       ))}
