@@ -9,6 +9,33 @@ Where your three repos differ, the guide says so in a **▶ Your repo** box. Whe
 
 ---
 
+## The twelve PRs, at a glance
+
+Ten in your own repo, two in `UA-MIS/platform-infra`. You write all twelve. Clayton merges the two platform ones. Full detail, including cluster effects, is in [§5 The PR sequence](#the-pr-sequence); each PR has its own section in [§6](#6-the-prs).
+
+| # | What it does | Where |
+| --- | --- | --- |
+| 1 | A Dockerfile per app, proven locally | your repo |
+| 2 | Deployments, Services, ConfigMap, ServiceAccount — inert | your repo |
+| 3 | Ingress, the dev overlay, ExternalSecrets — still inert | your repo |
+| **4** | **Your tenant claim** — creates your namespaces, Harbor project, Vault role and databases | **`platform-infra`** |
+| 5 | CI builds and pushes images; promotion map — **the switch**, first real deploy | your repo |
+| 6 | MinIO and the database, verified in dev | your repo |
+| 7 | Staging and prod overlays; first release tag | your repo |
+| 8 | Data: seed dev/staging, rehearse the import, write the prod procedure | your repo |
+| 9 | Prod comes up **beside** the VM on a holding host, and gets the real data | your repo |
+| 10 | The flip: the real hostname moves to Kubernetes | your repo |
+| 11 | Delete the VM chart and `deploy/vm` from your repo | your repo |
+| **12** | **Retire the VM tenant** — deletes the VM and its disk, **irreversibly** | **`platform-infra`** |
+
+Three things worth knowing before you start:
+
+- **PRs 1–3 change nothing.** They add files that nothing reads yet. That is deliberate — you build the whole shape before anything acts on it.
+- **Nothing exists until PR 4 merges.** Your namespaces, database and Harbor project are created by that claim, not by PRs 1–3.
+- **The VM keeps serving until PR 10.** You are not replacing it in place; you stand the new one up next to it, move the hostname, and only then take the old one down.
+
+---
+
 ## 0. Ground rules
 
 1. **You never run `kubectl`.** Not for deploying, debugging, or "just checking". The platform is designed so that you cannot need it. Everything below uses git, GitHub Actions, the ArgoCD web UI, the Harbor web UI, the DB console, and the browser. (Local `docker` is fine; that is your laptop, not the cluster.)
