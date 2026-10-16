@@ -1,18 +1,23 @@
 # orders-api
 
-Internal-only Fastify service. Sole MySQL writer (Drizzle) for the `crimson-copies` app --
-`storefront` and `staff-console` never touch the database directly, only this service's
+Internal-only Fastify service. Sole Postgres (Neon) writer (Drizzle) for the `crimson-copies`
+app -- `storefront` and `staff-console` never touch the database directly, only this service's
 `/api/*` and `/internal/*` routes, over a shared `X-Internal-Key` header.
+
+(The original MySQL schema/repository/migrations still exist under `src/db/schema.ts` and
+`drizzle/`, but `server.ts` boots the Postgres stack -- `db:migrate`/`db:seed` below are the
+MySQL-era commands and are dead ends against a real deployment; use the `:postgres` variants.)
 
 ## Local setup
 
 ```bash
-pnpm --filter @crimson-copies/orders-api run db:migrate
-pnpm --filter @crimson-copies/orders-api run db:seed
+# DATABASE_URL in .env must be a Neon/Postgres connection string.
+pnpm --filter @crimson-copies/orders-api run db:migrate:postgres
+pnpm --filter @crimson-copies/orders-api run db:seed:postgres
 pnpm --filter @crimson-copies/orders-api dev
 ```
 
-`db:seed` is idempotent -- safe to re-run, it skips usernames that already exist.
+`db:seed:postgres` is idempotent -- safe to re-run, it skips usernames that already exist.
 
 ## Demo accounts
 

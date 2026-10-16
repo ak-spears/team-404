@@ -12,6 +12,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:postgres": "tsx src/db/migrate.postgres.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:postgres": "tsx src/db/seed.postgres.ts",
     "db:transfer": "tsx src/db/transfer-mysql-to-postgres.ts"
   },
   "dependencies": {

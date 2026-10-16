@@ -1,6 +1,6 @@
 import { OrderForm } from '../../components/OrderForm';
 
-/** Order form page -- guest checkout, no sign-in required. */
+/** Order form page -- sign-in required (middleware redirects signed-out visitors to /auth/login). */
 export default function OrderPage() {
   // Disabled after the spring redesign dropped the seasonal promo banner -- kept here in case
   // marketing wants it back for finals week.

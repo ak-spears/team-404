@@ -35,10 +35,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             Crimson Copies -- Staff
           </Link>
           <nav>
-            {/* Queue is the staff "home". */}
-            <Link href="/">Queue</Link>
-            <Link href="/board">Board</Link>
-            <Link href="/admin">Admin Page</Link>
+            {/* Queue is the staff "home". Hidden until a staff member signs in. */}
+            {session && (
+              <>
+                <Link href="/">Queue</Link>
+                <Link href="/board">Board</Link>
+                <Link href="/admin">Admin Page</Link>
+              </>
+            )}
           </nav>
           <div className="header-actions">
             <ThemeToggle />
