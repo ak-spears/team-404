@@ -5,6 +5,7 @@ import {
   orderCreateInputSchema,
   orderListQuerySchema,
   orderStatusUpdateInputSchema,
+  staffRegistrationInputSchema,
   type Order,
   type OrderListQuery,
 } from '@crimson-copies/shared';
@@ -18,7 +19,6 @@ import {
   type OrdersRepository,
   type OrderWithCustomer,
 } from '../repositories/orders-repository.js';
-
 
 function toOrderDto(record: OrderRecord): Order {
   return {
@@ -43,8 +43,28 @@ function toOrderDto(record: OrderRecord): Order {
  * files on shop machines, so anything that isn't recognisably print material is refused.
  */
 const ALLOWED_FILE_EXTENSIONS = new Set([
-  'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'rtf', 'csv',
-  'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'svg', 'eps', 'ai', 'psd', 'zip',
+  'pdf',
+  'doc',
+  'docx',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
+  'txt',
+  'rtf',
+  'csv',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'bmp',
+  'tif',
+  'tiff',
+  'svg',
+  'eps',
+  'ai',
+  'psd',
+  'zip',
 ]);
 
 /**
@@ -54,7 +74,10 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
  */
 function sanitizeFilename(filename: string): string {
   const lastSegment = filename.split(/[\\/]/).pop() ?? '';
-  const cleaned = lastSegment.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '').slice(0, 200);
+  const cleaned = lastSegment
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 200);
   return cleaned.length > 0 ? cleaned : 'upload';
 }
 
@@ -112,7 +135,16 @@ const NEVER_INLINE_EXTENSIONS = new Set(['svg', 'htm', 'html', 'xhtml', 'xml']);
  * the server-chosen Content-Type plus `nosniff` stops either being re-read as HTML. Everything
  * else keeps the sandbox; svg/html/xml are additionally forced to download (see above).
  */
-const UNSANDBOXED_INLINE_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff']);
+const UNSANDBOXED_INLINE_EXTENSIONS = new Set([
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'bmp',
+  'tif',
+  'tiff',
+]);
 
 /** `inline` so PDFs and images open in a tab for printing; the name is re-sanitized on the way out. */
 function contentDisposition(originalFilename: string): string {
@@ -155,7 +187,12 @@ async function authorizeFileAccess(
 ): Promise<FileAccess | null> {
   const { role, id: userId } = request.internalUser;
   if (role === 'staff') return 'staff';
-  if (role === 'customer' && userId !== undefined && order.userId !== null && Number(userId) === order.userId) {
+  if (
+    role === 'customer' &&
+    userId !== undefined &&
+    order.userId !== null &&
+    Number(userId) === order.userId
+  ) {
     return 'owner';
   }
 
@@ -267,6 +304,47 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
 
     return reply.code(200).send(await options.repository.listStaffMembers());
   });
+
+  app.post('/api/staff', { preHandler: requireInternalKey }, async (request, reply) => {
+    if (request.internalUser.role !== 'staff') {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
+    const parsed = staffRegistrationInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+    }
+
+    const staffMember = await options.repository.createStaffMember(parsed.data.email);
+    if (!staffMember) {
+      return reply.code(409).send({ error: 'email_already_linked_to_non_staff_account' });
+    }
+
+    return reply.code(201).send(staffMember);
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/staff/:id',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      if (request.internalUser.role !== 'staff') {
+        return reply.code(403).send({ error: 'forbidden' });
+      }
+
+      const userId = Number(request.params.id);
+      const removedByUserId = parseUserId(request.internalUser.id);
+      if (!Number.isInteger(userId) || userId <= 0 || removedByUserId === undefined) {
+        return reply.code(400).send({ error: 'invalid_user_id' });
+      }
+      if (userId === removedByUserId) {
+        return reply.code(409).send({ error: 'cannot_remove_current_admin' });
+      }
+
+      const removed = await options.repository.removeStaffMember(userId, removedByUserId);
+      if (!removed) return reply.code(404).send({ error: 'staff_not_found' });
+      return reply.code(200).send({ removed: true });
+    },
+  );
 
   app.patch<{ Params: { id: string } }>(
     '/api/orders/:id/assignment',
@@ -613,7 +691,11 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
 
       const access = await authorizeFileAccess(request, order, options.repository);
       if (!access) {
-        console.log('file download rejected', { orderId: id, fileId, role: request.internalUser.role ?? 'anonymous' });
+        console.log('file download rejected', {
+          orderId: id,
+          fileId,
+          role: request.internalUser.role ?? 'anonymous',
+        });
         return reply.code(403).send({ error: 'forbidden' });
       }
 
@@ -624,7 +706,10 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
 
       let stream;
       try {
-        stream = await getStorageClient(options.config).getObject(options.config.MINIO_BUCKET, file.objectKey);
+        stream = await getStorageClient(options.config).getObject(
+          options.config.MINIO_BUCKET,
+          file.objectKey,
+        );
       } catch (err) {
         const code = errorCode(err);
         console.error('file download from storage failed', {
@@ -647,68 +732,68 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
         .header('Content-Disposition', contentDisposition(file.originalFilename))
         .header('X-Content-Type-Options', 'nosniff')
         .header('Cache-Control', 'private, no-store');
-      if (!UNSANDBOXED_INLINE_EXTENSIONS.has(fileExtension(sanitizeFilename(file.originalFilename)))) {
+      if (
+        !UNSANDBOXED_INLINE_EXTENSIONS.has(fileExtension(sanitizeFilename(file.originalFilename)))
+      ) {
         // Belt and braces for anything else rendered inline: no script, no same-origin access.
         reply.header('Content-Security-Policy', 'sandbox');
       }
       return reply.send(stream);
     },
   );
-app.get<{ Querystring: OrderListQuery }>(
-  '/api/orders',
-  { preHandler: requireInternalKey },
-  async (request, reply) => {
+  app.get<{ Querystring: OrderListQuery }>(
+    '/api/orders',
+    { preHandler: requireInternalKey },
+    async (request, reply) => {
+      const parsed = orderListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
+      }
 
-    const parsed = orderListQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
-    }
+      const { role, id: userId } = request.internalUser;
 
- const { role, id: userId } = request.internalUser;
+      let filterUserId: number | undefined;
+      let filterAssignedTo: number | undefined;
 
-let filterUserId: number | undefined;
-let filterAssignedTo: number | undefined;
+      if (parsed.data.mine) {
+        const parsedUserId = parseUserId(userId);
 
-if (parsed.data.mine) {
-  const parsedUserId = parseUserId(userId);
+        if (parsedUserId === undefined) {
+          return reply.code(200).send([]);
+        }
 
-  if (parsedUserId === undefined) {
-    return reply.code(200).send([]);
-  }
+        if (role === 'customer') {
+          filterUserId = parsedUserId;
+        } else if (role === 'staff') {
+          filterAssignedTo = parsedUserId;
+        } else {
+          return reply.code(200).send([]);
+        }
+      } else if (role !== 'staff') {
+        return reply.code(403).send({ error: 'forbidden' });
+      }
 
-  if (role === 'customer') {
-    filterUserId = parsedUserId;
-  } else if (role === 'staff') {
-    filterAssignedTo = parsedUserId;
-  } else {
-    return reply.code(200).send([]);
-  }
-} else if (role !== 'staff') {
-  return reply.code(403).send({ error: 'forbidden' });
-}
+      const filter: {
+        status?: typeof parsed.data.status;
+        userId?: number;
+        assignedTo?: number;
+      } = {};
 
-const filter: {
-  status?: typeof parsed.data.status;
-  userId?: number;
-  assignedTo?: number;
-} = {};
+      if (parsed.data.status) {
+        filter.status = parsed.data.status;
+      }
 
-if (parsed.data.status) {
-  filter.status = parsed.data.status;
-}
+      if (filterUserId !== undefined) {
+        filter.userId = filterUserId;
+      }
 
-if (filterUserId !== undefined) {
-  filter.userId = filterUserId;
-}
+      if (filterAssignedTo !== undefined) {
+        filter.assignedTo = filterAssignedTo;
+      }
 
-if (filterAssignedTo !== undefined) {
-  filter.assignedTo = filterAssignedTo;
-}
+      const list = await options.repository.listOrders(filter);
 
-const list = await options.repository.listOrders(filter);
-
-return reply.code(200).send(list.map(toOrderDto));
-  },
-);
-
+      return reply.code(200).send(list.map(toOrderDto));
+    },
+  );
 }

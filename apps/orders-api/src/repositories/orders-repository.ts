@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
   isValidStatusTransition,
   type OrderEventActor,
@@ -11,7 +11,15 @@ import {
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
-import { customers, googleIdentities, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.js';
+import {
+  customers,
+  googleIdentities,
+  orderEvents,
+  orderFiles,
+  orders,
+  orderUploadCredentials,
+  users,
+} from '../db/schema.js';
 
 const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -91,8 +99,7 @@ export interface RegisterUploadedFileResult {
 export type VerifyUploadCredentialResult = { valid: true; orderId: number } | { valid: false };
 
 export type VerifyUserCredentialsResult =
-  | { valid: true; userId: number; username: string; role: 'customer' | 'staff' }
-  | { valid: false };
+  { valid: true; userId: number; username: string; role: 'customer' | 'staff' } | { valid: false };
 
 export interface UpdateOrderStatusParams {
   orderId: number;
@@ -127,6 +134,9 @@ export interface OrderFileRecord {
 
 export interface OrdersRepository {
   listStaffMembers(): Promise<Array<{ id: number; username: string }>>;
+  createStaffMember(email: string): Promise<{ id: number; username: string } | null>;
+  isStaffUser(userId: number): Promise<boolean>;
+  removeStaffMember(userId: number, removedByUserId: number): Promise<boolean>;
   createOrder(params: CreateOrderParams): Promise<CreateOrderResult>;
   getOrderById(id: number): Promise<OrderRecord | null>;
   getOrderWithCustomerById(id: number): Promise<OrderWithCustomer | null>;
@@ -135,7 +145,9 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   /** One file, only if it belongs to `orderId` -- a file id alone never identifies a file. */
   getOrderFile(orderId: number, fileId: number): Promise<OrderFileRecord | null>;
-  registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
+  registerUploadedFile(
+    params: RegisterUploadedFileParams,
+  ): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   /**
    * Non-consuming variant of the above, for the web upload path: it proves the caller holds
@@ -159,7 +171,10 @@ export interface OrdersRepository {
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
 
   /** Stores a CWID on the user. Always overwrites (non-UA Google logins re-collect every time). */
-  setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
+  setUserCwid(
+    userId: number,
+    cwid: string,
+  ): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
 
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
   assignOrder(params: AssignOrderParams): Promise<OrderRecord | null>;
@@ -172,7 +187,6 @@ export interface OrdersRepository {
     payload?: Record<string, unknown>,
   ): Promise<void>;
 }
-
 
 /**
  * Generates a one-time SFTP upload password. Not a bcrypt input constraint -- just needs to be
@@ -210,6 +224,92 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .from(users)
         .where(eq(users.role, 'staff'))
         .orderBy(users.username);
+    },
+
+    async createStaffMember(email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      return db.transaction(async (tx) => {
+        const [existingIdentity] = await tx
+          .select()
+          .from(googleIdentities)
+          .where(sql`lower(${googleIdentities.email}) = ${normalizedEmail}`)
+          .limit(1);
+
+        if (existingIdentity) {
+          const [existingUser] = await tx
+            .select({ id: users.id, username: users.username, role: users.role })
+            .from(users)
+            .where(eq(users.id, existingIdentity.userId))
+            .limit(1);
+          return existingUser?.role === 'staff'
+            ? { id: existingUser.id, username: existingUser.username }
+            : null;
+        }
+
+        const [existingUser] = await tx
+          .select({ id: users.id, username: users.username, role: users.role })
+          .from(users)
+          .where(sql`lower(${users.username}) = ${normalizedEmail}`)
+          .limit(1);
+        if (existingUser && existingUser.role !== 'staff') return null;
+
+        const user = existingUser
+          ? { id: existingUser.id, username: existingUser.username }
+          : await tx
+              .insert(users)
+              .values({ username: normalizedEmail, passwordHash: null, role: 'staff' })
+              .then(([result]) => ({ id: result.insertId, username: normalizedEmail }));
+
+        await tx.insert(googleIdentities).values({
+          userId: user.id,
+          googleId: `auth0:${normalizedEmail}`,
+          email: normalizedEmail,
+        });
+        return user;
+      });
+    },
+
+    async isStaffUser(userId) {
+      const [user] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.role, 'staff')))
+        .limit(1);
+      return Boolean(user);
+    },
+
+    async removeStaffMember(userId, removedByUserId) {
+      return db.transaction(async (tx) => {
+        const [user] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, userId), eq(users.role, 'staff')))
+          .limit(1);
+        if (!user) return false;
+
+        const assignedOrders = await tx
+          .select({ id: orders.id })
+          .from(orders)
+          .where(eq(orders.assignedTo, userId));
+
+        if (assignedOrders.length > 0) {
+          await tx
+            .update(orders)
+            .set({ assignedTo: null, updatedAt: new Date() })
+            .where(eq(orders.assignedTo, userId));
+          await tx.insert(orderEvents).values(
+            assignedOrders.map(({ id }) => ({
+              orderId: id,
+              eventType: 'assignment_changed',
+              actor: 'staff' as const,
+              payloadJson: { from: userId, to: null, removedBy: removedByUserId },
+            })),
+          );
+        }
+
+        await tx.update(users).set({ role: 'customer' }).where(eq(users.id, userId));
+        return true;
+      });
     },
 
     async createOrder(params) {
@@ -330,18 +430,17 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async listOrders(filter) {
-  const conditions = [];
+      const conditions = [];
 
-if (filter.status) {
-  conditions.push(eq(orders.status, filter.status));
-}
+      if (filter.status) {
+        conditions.push(eq(orders.status, filter.status));
+      }
 
-if (filter.assignedTo !== undefined) {
-  conditions.push(eq(orders.assignedTo, filter.assignedTo));
-}
+      if (filter.assignedTo !== undefined) {
+        conditions.push(eq(orders.assignedTo, filter.assignedTo));
+      }
 
-
-/*
+      /*
     async listOrders(filter) {
       const conditions = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
@@ -405,7 +504,11 @@ if (filter.assignedTo !== undefined) {
 
     async registerUploadedFile(params) {
       const res = await db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         await tx.insert(orderFiles).values({
@@ -432,7 +535,10 @@ if (filter.assignedTo !== undefined) {
         // already-files_received order.
         let statusChanged = false;
         if (isValidStatusTransition(order.status, 'files_received')) {
-          await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
+          await tx
+            .update(orders)
+            .set({ status: 'files_received' })
+            .where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
@@ -475,7 +581,9 @@ if (filter.assignedTo !== undefined) {
       const [credential] = await db
         .select()
         .from(orderUploadCredentials)
-        .where(and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)))
+        .where(
+          and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)),
+        )
         .limit(1);
 
       if (!credential || credential.expiresAt.getTime() < Date.now()) {
@@ -488,7 +596,9 @@ if (filter.assignedTo !== undefined) {
       const [updateResult] = await db
         .update(orderUploadCredentials)
         .set({ usedAt: new Date() })
-        .where(and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)));
+        .where(
+          and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)),
+        );
       if (updateResult.affectedRows === 0) {
         // Lost the race to another concurrent verify call for the same one-time credential.
         return { valid: false };
@@ -497,9 +607,14 @@ if (filter.assignedTo !== undefined) {
       return { valid: true, orderId: credential.orderId };
     },
 
-    async verifyUserCredentials(username, password) { //Google auth version
+    async verifyUserCredentials(username, password) {
+      //Google auth version
       const normalizedUsername = username.trim().toLowerCase();
-      const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, normalizedUsername))
+        .limit(1);
       if (!user) return { valid: false };
 
       if (!user.passwordHash) return { valid: false };
@@ -510,8 +625,7 @@ if (filter.assignedTo !== undefined) {
       return { valid: true, userId: user.id, username: user.username, role: user.role };
     },
 
-
-        async verifyOrCreateGoogleUser({ googleId, email }) {
+    async verifyOrCreateGoogleUser({ googleId, email }) {
       // Check if this Google account is already linked to a user.
       const [existingIdentity] = await db
         .select()
@@ -712,7 +826,11 @@ if (filter.assignedTo !== undefined) {
 
     async assignOrder(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         if (params.assignedTo !== null) {
@@ -741,14 +859,22 @@ if (filter.assignedTo !== undefined) {
           },
         });
 
-        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [updated] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         return updated ?? null;
       });
     },
 
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         if (!isValidStatusTransition(order.status, params.status)) {
@@ -781,7 +907,11 @@ if (filter.assignedTo !== undefined) {
           payloadJson: { from: order.status, to: params.status },
         });
 
-        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [updated] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         return updated ?? null;
       });
     },
@@ -789,5 +919,3 @@ if (filter.assignedTo !== undefined) {
     recordEvent,
   };
 }
-
-

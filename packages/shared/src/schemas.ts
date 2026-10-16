@@ -30,10 +30,7 @@ export type GoogleAuthCodeInput = z.infer<typeof googleAuthCodeInputSchema>;
  */
 export const setCwidInputSchema = z.object({
   userId: z.int().positive(),
-  cwid: z
-    .string()
-    .trim()
-    .regex(/^\d+$/, 'CWID must be a number'),
+  cwid: z.string().trim().regex(/^\d+$/, 'CWID must be a number'),
 });
 export type SetCwidInput = z.infer<typeof setCwidInputSchema>;
 
@@ -57,7 +54,10 @@ export function isAllowedLoginUsername(username: string): boolean {
   const allowedExceptions = ['customer', 'staff'];
   const allowedSuffixes = ['@crimson.ua.edu', '@ua.edu'];
 
-  return allowedExceptions.includes(normalized) || allowedSuffixes.some((suffix) => normalized.endsWith(suffix));
+  return (
+    allowedExceptions.includes(normalized) ||
+    allowedSuffixes.some((suffix) => normalized.endsWith(suffix))
+  );
 }
 
 /** Body of `POST /api/orders`. */
@@ -83,6 +83,17 @@ export const orderAssignmentInputSchema = z.object({
   assignedTo: z.int().positive().nullable(),
 });
 export type OrderAssignmentInput = z.infer<typeof orderAssignmentInputSchema>;
+
+/** Body of `POST /api/staff` for admin-managed Auth0 staff registration. */
+export const staffRegistrationInputSchema = z.object({
+  email: z
+    .email()
+    .max(64)
+    .trim()
+    .toLowerCase()
+    .refine(isUaEmail, 'Staff registration requires a UA email address.'),
+});
+export type StaffRegistrationInput = z.infer<typeof staffRegistrationInputSchema>;
 
 /** Query of `GET /api/orders`. */
 export const orderListQuerySchema = z.object({

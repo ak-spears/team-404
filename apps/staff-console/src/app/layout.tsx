@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { cookies } from 'next/headers';
-import './globals.css';
+import './globals.css'; 
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BASE_PATH } from '../lib/base-path';
 //import { loadConfig } from '../lib/config';

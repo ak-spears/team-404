@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
+import { callOrdersApi } from './internal-api';
 import { loadConfig } from './config';
 
 export type SessionRole = 'customer' | 'staff';
@@ -69,7 +70,18 @@ export function verifySessionCookieValue(value: string | undefined): SessionPayl
 export async function getStaffSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
-  return session?.role === 'staff' ? session : null;
+  if (session?.role !== 'staff') return null;
+
+  try {
+    const result = await callOrdersApi<{ isStaff: boolean }>({
+      method: 'GET',
+      path: '/internal/auth/is-staff',
+      searchParams: { userId: String(session.userId) },
+    });
+    return result.status === 200 && result.body.isStaff ? session : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createAdminCookieValue(): string {

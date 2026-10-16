@@ -684,7 +684,319 @@ dd {
   font-size: 0.8rem;
 }
 
+/* -------------------- Admin workspace -------------------- */
+
+.admin-masthead {
+  margin: -0.5rem 0 1.25rem;
+  padding: 1.6rem 1.8rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--crimson);
+  background: linear-gradient(110deg, var(--crimson-tint) 0%, var(--paper) 74%);
+}
+
+.admin-masthead h1 {
+  margin: 0.15rem 0 0.25rem;
+  color: var(--crimson);
+  font-size: 1.8rem;
+}
+
+.admin-masthead > p:last-child {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.admin-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.admin-confirmation {
+  max-width: 620px;
+  padding: 1.5rem 1.7rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--crimson);
+  background: linear-gradient(110deg, var(--crimson-tint) 0%, var(--paper) 74%);
+}
+
+.admin-confirmation h1 {
+  margin: 0.25rem 0 1rem;
+  color: var(--ink);
+  font-size: 1.5rem;
+}
+
+.admin-confirmation form {
+  margin: 0;
+}
+
+.admin-confirmation .admin-demo-note {
+  margin: 1rem 0 0;
+}
+
+.admin-demo-note,
+.admin-analytics-note {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.admin-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.admin-dashboard-option {
+  display: flex;
+  min-height: 255px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--crimson);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-dashboard-option:hover,
+.admin-dashboard-option:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--crimson-tint-strong);
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
+}
+
+.admin-option-number {
+  margin-bottom: 1.5rem;
+  color: var(--crimson);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.admin-option-title {
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+
+.admin-option-description {
+  margin-top: 0.45rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.admin-option-action {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 1.25rem;
+  color: var(--crimson);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.admin-option-action span {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.admin-back-link {
+  display: inline-block;
+  margin-bottom: 0.9rem;
+  color: var(--crimson);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-back-link:hover {
+  text-decoration: underline;
+}
+
+.admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.25rem 0 2rem;
+}
+
+.admin-metric {
+  display: grid;
+  gap: 0.4rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.admin-metric span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-metric strong {
+  color: var(--crimson);
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-analytics-section {
+  margin: 1.5rem 0 2rem;
+}
+
+.admin-analytics-section h2 {
+  margin: 0 0 0.8rem;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.weekly-chart {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(58px, 1fr));
+  gap: 0.6rem;
+  min-height: 250px;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.weekly-chart-column {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  justify-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.weekly-chart-value,
+.weekly-chart-label,
+.weekly-chart-sales {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.weekly-chart-value {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.weekly-chart-track {
+  display: flex;
+  width: min(100%, 2.5rem);
+  height: 100%;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: 2px 2px 0 0;
+  background: var(--canvas);
+}
+
+.weekly-chart-bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--crimson);
+  transition: height 0.2s ease;
+}
+
+.weekly-chart-sales {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.staff-registration-form {
+  display: grid;
+  max-width: 540px;
+  gap: 0.7rem;
+  margin-top: 1.25rem;
+}
+
+.staff-registration-form label {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.staff-registration-form input {
+  width: 100%;
+}
+
+.staff-registration-form .muted,
+.staff-registration-form .error,
+.staff-registration-form .success {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.staff-registration-form .success {
+  color: #28613b;
+}
+
+.staff-directory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.staff-directory li {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.staff-remove-button {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 0.78rem;
+}
+
+.staff-remove-button:hover:not(:disabled) {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+}
+
 @media (max-width: 700px) {
+  .admin-dashboard,
+  .admin-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-option {
+    min-height: 190px;
+  }
+
+  .weekly-chart {
+    grid-template-columns: repeat(8, minmax(62px, 1fr));
+    overflow-x: auto;
+  }
+
   .board-page {
     width: calc(100vw - 2rem);
   }
@@ -710,6 +1022,8 @@ dd {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .admin-dashboard-option,
+  .weekly-chart-bar,
   .kanban-column,
   .kanban-card {
     transition: none;
