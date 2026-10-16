@@ -24,7 +24,7 @@ export function StaffRegistrationForm() {
         body: JSON.stringify({ email }),
       });
       if (response.status === 201) {
-        setMessage(`${email.trim().toLowerCase()} can now sign in through Auth0 as staff.`);
+        setMessage(`${email.trim().toLowerCase()} can sign in with Google as staff.`);
         setEmail('');
         router.refresh();
       } else if (response.status === 409) {
@@ -54,8 +54,8 @@ export function StaffRegistrationForm() {
         required
       />
       <p className="muted">
-        Registration creates a passwordless staff account linked to this email. The staff member
-        signs in using the same verified email through Auth0.
+        The staff account is activated when the person signs in with Google using this verified UA
+        email.
       </p>
       {error && (
         <p className="error" role="alert">

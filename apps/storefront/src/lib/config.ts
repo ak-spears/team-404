@@ -6,6 +6,10 @@ import { z } from 'zod';
 // setup.
 const DEFAULT_STAFF_CONSOLE_URL =
   process.env.NODE_ENV === 'production' ? '/staff' : 'http://localhost:3001/staff';
+const DEFAULT_APP_BASE_URL =
+  process.env.NODE_ENV === 'production'
+    ? 'https://team-404.capstone.uamishub.com'
+    : 'http://localhost:3000';
 
 /** Server-only environment -- nothing here is ever exposed to a Client Component bundle. */
 const envSchema = z.object({
@@ -14,12 +18,12 @@ const envSchema = z.object({
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // staff-console, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
-  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   AUTH0_DOMAIN: z.string().min(1, 'AUTH0_DOMAIN is required').optional(),
   AUTH0_CLIENT_ID: z.string().min(1, 'AUTH0_CLIENT_ID is required').optional(),
   AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required').optional(),
   AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required').optional(),
-  APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
+  APP_BASE_URL: z.string().url().default(DEFAULT_APP_BASE_URL),
   // Read-only MinIO access, used ONLY to presign short-lived download links so a customer can
   // open the file they uploaded and check they sent the right one. The storefront never writes
   // to storage -- orders-api does. MINIO_PUBLIC_* is the staff/customer BROWSER's view of

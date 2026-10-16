@@ -134,7 +134,9 @@ export interface OrderFileRecord {
 
 export interface OrdersRepository {
   listStaffMembers(): Promise<Array<{ id: number; username: string }>>;
-  createStaffMember(email: string): Promise<{ id: number; username: string } | null>;
+  createStaffMember(
+    email: string,
+  ): Promise<{ id: number; username: string } | null>;
   isStaffUser(userId: number): Promise<boolean>;
   removeStaffMember(userId: number, removedByUserId: number): Promise<boolean>;
   createOrder(params: CreateOrderParams): Promise<CreateOrderResult>;
@@ -241,9 +243,8 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
             .from(users)
             .where(eq(users.id, existingIdentity.userId))
             .limit(1);
-          return existingUser?.role === 'staff'
-            ? { id: existingUser.id, username: existingUser.username }
-            : null;
+          if (!existingUser || existingUser.role !== 'staff') return null;
+          return { id: existingUser.id, username: existingUser.username };
         }
 
         const [existingUser] = await tx
@@ -252,7 +253,6 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           .where(sql`lower(${users.username}) = ${normalizedEmail}`)
           .limit(1);
         if (existingUser && existingUser.role !== 'staff') return null;
-
         const user = existingUser
           ? { id: existingUser.id, username: existingUser.username }
           : await tx
@@ -260,11 +260,6 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
               .values({ username: normalizedEmail, passwordHash: null, role: 'staff' })
               .then(([result]) => ({ id: result.insertId, username: normalizedEmail }));
 
-        await tx.insert(googleIdentities).values({
-          userId: user.id,
-          googleId: `auth0:${normalizedEmail}`,
-          email: normalizedEmail,
-        });
         return user;
       });
     },
@@ -626,6 +621,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async verifyOrCreateGoogleUser({ googleId, email }) {
+      const normalizedEmail = email.trim().toLowerCase();
       // Check if this Google account is already linked to a user.
       const [existingIdentity] = await db
         .select()
@@ -652,10 +648,51 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         };
       }
 
+      const [emailIdentity] = await db
+        .select()
+        .from(googleIdentities)
+        .where(sql`lower(${googleIdentities.email}) = ${normalizedEmail}`)
+        .limit(1);
+
+      if (emailIdentity) {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, emailIdentity.userId))
+          .limit(1);
+        if (!user) throw new Error('google_identities row references a missing user');
+
+        await db
+          .update(googleIdentities)
+          .set({ googleId, email: normalizedEmail })
+          .where(eq(googleIdentities.id, emailIdentity.id));
+        return { valid: true, userId: user.id, username: user.username, role: user.role };
+      }
+
+      const [preRegisteredStaff] = await db
+        .select()
+        .from(users)
+        .where(and(sql`lower(${users.username}) = ${normalizedEmail}`, eq(users.role, 'staff')))
+        .limit(1);
+
+      if (preRegisteredStaff) {
+        await db.insert(googleIdentities).values({
+          userId: preRegisteredStaff.id,
+          googleId,
+          email: normalizedEmail,
+        });
+        return {
+          valid: true,
+          userId: preRegisteredStaff.id,
+          username: preRegisteredStaff.username,
+          role: 'staff' as const,
+        };
+      }
+
       // No existing link -- create a brand-new customer account for this Google user.
       // Username is derived from email since Google doesn't supply one; not guaranteed
       // collision-free, but good enough for this project's scope.
-      const derivedUsername = (email.split('@')[0] ?? 'user').toLowerCase();
+      const derivedUsername = (normalizedEmail.split('@')[0] ?? 'user').toLowerCase();
 
       return db.transaction(async (tx) => {
         const [insertResult] = await tx.insert(users).values({
@@ -669,7 +706,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         await tx.insert(googleIdentities).values({
           userId: newUserId,
           googleId,
-          email,
+          email: normalizedEmail,
         });
 
         return {

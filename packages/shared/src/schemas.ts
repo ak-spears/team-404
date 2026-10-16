@@ -84,7 +84,7 @@ export const orderAssignmentInputSchema = z.object({
 });
 export type OrderAssignmentInput = z.infer<typeof orderAssignmentInputSchema>;
 
-/** Body of `POST /api/staff` for admin-managed Auth0 staff registration. */
+/** Body of `POST /api/staff` for admin-managed staff registration. */
 export const staffRegistrationInputSchema = z.object({
   email: z
     .email()

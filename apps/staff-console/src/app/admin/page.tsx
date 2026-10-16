@@ -58,7 +58,7 @@ export default async function AdminPage() {
           <span className="admin-option-number">03</span>
           <span className="admin-option-title">Staff access</span>
           <span className="admin-option-description">
-            Register UA staff emails for access through Auth0.
+            Register UA emails for access through Google sign-in.
           </span>
           <span className="admin-option-action">
             Manage staff <span aria-hidden="true">→</span>

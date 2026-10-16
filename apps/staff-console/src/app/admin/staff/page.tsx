@@ -24,8 +24,8 @@ export default async function AdminStaffPage() {
       </Link>
       <h1>Staff access</h1>
       <p className="admin-analytics-note">
-        Register a UA email for staff access. The person will be linked to the staff role when they
-        sign in through Auth0.
+        Register a UA email and initial password for staff console access. Passwords are stored as
+        bcrypt hashes.
       </p>
       <StaffRegistrationForm />
       <section className="admin-analytics-section">
