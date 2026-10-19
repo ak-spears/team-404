@@ -3,14 +3,17 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import {
+  ORDER_STATUS_LABELS,
   ORDER_STATUSES,
   isValidStatusTransition,
   type Order,
   type OrderStatus,
 } from '@crimson-copies/shared';
+import { SERVICE_TITLES } from '../lib/labels';
 import type { StaffMember } from './OrderAssignmentTable';
 
-const label = (status: string) => status.replace(/_/g, ' ');
+const label = (status: OrderStatus) => ORDER_STATUS_LABELS[status];
+const placedOn = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
 export function KanbanBoard({
   initialOrders,
@@ -74,7 +77,7 @@ export function KanbanBoard({
           value={staffFilter}
           onChange={(e) => setStaffFilter(e.target.value)}
         >
-          <option value="all">All Orders</option>
+          <option value="all">All orders</option>
           <option value="unassigned">Unassigned</option>
 
           {staffMembers.map((staff) => (
@@ -116,9 +119,9 @@ export function KanbanBoard({
                   isValidStatusTransition(order.status, s),
                 );
 
-                const assigneeName =
-                  staffMembers.find((staff) => staff.id === order.assignedTo)?.username ??
-                  'Unassigned';
+                const assigneeName = staffMembers.find(
+                  (staff) => staff.id === order.assignedTo,
+                )?.username;
 
                 return (
                   <article
@@ -128,11 +131,20 @@ export function KanbanBoard({
                     onDragStart={() => setDraggingId(order.id)}
                     onDragEnd={() => setDraggingId(null)}
                   >
-                    <Link href={`/orders/${order.id}`}>#{order.id}</Link>
-                    <div>{order.serviceType}</div>
-                    <div className="muted">Assigned: {assigneeName}</div>
+                    <div className="kanban-card-head">
+                      <Link href={`/orders/${order.id}`}>#{order.id}</Link>
+                      <span
+                        className="order-row-assignee"
+                        data-unassigned={assigneeName ? undefined : ''}
+                      >
+                        {assigneeName ?? 'Unassigned'}
+                      </span>
+                    </div>
+                    <strong className="kanban-card-title">
+                      {SERVICE_TITLES[order.serviceType]}
+                    </strong>
                     <div className="muted">
-                      Qty {order.quantity} · {new Date(order.createdAt).toLocaleDateString()}
+                      Qty {order.quantity} &middot; {placedOn.format(new Date(order.createdAt))}
                     </div>
                     {nextStatuses.length > 0 && (
                       <select

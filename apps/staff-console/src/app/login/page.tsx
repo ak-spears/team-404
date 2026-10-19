@@ -127,27 +127,49 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <h1>Staff sign in</h1>
-      {error && <p className="error">{getLoginErrorMessage(error)}</p>}
-      <form action={login}>
-        <input type="hidden" name="next" value={safeNextPath(next)} />
-        <label>
-          Username
-          <input type="text" name="username" required autoComplete="username" />
-        </label>
-        <label>
-          Password
-          <input type="password" name="password" required autoComplete="current-password" />
-        </label>
-        <button type="submit">Sign in</button>
+    <section className="auth-card">
+  <p className="auth-eyebrow">Staff workspace</p>
+  <h1>Sign in</h1>
+  <p className="muted">Use your staff account to see the order queue.</p>
+  {error && <p className="error">{getLoginErrorMessage(error)}</p>}
+
+  <form action={login}>
+    <input type="hidden" name="next" value={safeNextPath(next)} />
+    <label>
+      Username
+      <input
+        type="text"
+        name="username"
+        required
+        autoComplete="username"
+      />
+    </label>
+    <label>
+      Password
+      <input
+        type="password"
+        name="password"
+        required
+        autoComplete="current-password"
+      />
+    </label>
+        <button type="submit" className="btn btn-primary">
+          Sign in
+        </button>
         {googleAuthUrl ? (
-          <a className="google-signin-btn" href={googleAuthUrl}>
-            Sign in with Google
-          </a>
+          <>
+            <p className="auth-divider">
+              <span>or</span>
+            </p>
+            <a href={googleAuthUrl} className="google-signin-btn">
+              <GoogleIcon />
+              Sign in with Google
+            </a>
+          </>
         ) : (
           <p className="muted">Google sign-in is not configured.</p>
         )}
       </form>
-    </>
+    </section>
   );
 }

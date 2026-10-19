@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { ORDER_STATUS_TRANSITIONS, type OrderStatus } from '@crimson-copies/shared';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_TRANSITIONS,
+  type OrderStatus,
+} from '@crimson-copies/shared';
 import { BASE_PATH } from '../lib/base-path';
 
-/** Advance an order's status. Posts to this app's own PATCH BFF route (staff-only). */
+/** Advance an order's status: one button per allowed next step. Posts to this app's own PATCH
+ * BFF route (staff-only), then refreshes the server-rendered page so the band updates. */
 export function StatusUpdateForm({
   orderId,
   currentStatus,
@@ -12,20 +18,15 @@ export function StatusUpdateForm({
   orderId: number;
   currentStatus: OrderStatus;
 }) {
+  const router = useRouter();
   const nextOptions = ORDER_STATUS_TRANSITIONS[currentStatus];
-  const [status, setStatus] = useState<OrderStatus | ''>(nextOptions[0] ?? '');
-  const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<OrderStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updated, setUpdated] = useState<OrderStatus | null>(null);
 
-  if (nextOptions.length === 0) {
-    return <p className="muted">Order #{orderId} is in a terminal state ({currentStatus}).</p>;
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (!status) return;
-    setSubmitting(true);
+  async function moveTo(status: OrderStatus): Promise<void> {
+    if (status === 'cancelled' && !window.confirm(`Cancel order #${orderId}?`)) return;
+    setPending(status);
     setError(null);
 
     try {
@@ -41,38 +42,50 @@ export function StatusUpdateForm({
         return;
       }
       setUpdated(status);
+      router.refresh();
     } catch {
       setError('Network error -- please try again.');
     } finally {
-      setSubmitting(false);
+      setPending(null);
     }
   }
 
-  if (updated) {
-    return <p>Order #{orderId} is now &ldquo;{updated}&rdquo;. Refresh to see the full record.</p>;
-  }
-
-  const optionElements = [];
-  for (const option of nextOptions) {
-    optionElements.push(
-      <option key={option} value={option}>
-        {option}
-      </option>,
-    );
-  }
-
   return (
-    <form onSubmit={handleSubmit}>
-      <label>
-        Advance to
-        <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)}>
-          {optionElements}
-        </select>
-      </label>
+    <div className="status-actions">
+      {updated && (
+        <p className="success" role="status">
+          Moved to {ORDER_STATUS_LABELS[updated]}.
+        </p>
+      )}
+
+      {nextOptions.length === 0 ? (
+        <p className="muted">
+          {ORDER_STATUS_LABELS[currentStatus]} is final &mdash; nothing left to do.
+        </p>
+      ) : (
+        <>
+          <p className="muted">
+            Currently <strong>{ORDER_STATUS_LABELS[currentStatus]}</strong>. Move it to:
+          </p>
+          {nextOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === 'cancelled' ? 'btn btn-danger' : 'btn btn-primary'}
+              disabled={pending !== null}
+              onClick={() => void moveTo(option)}
+            >
+              {pending === option
+                ? 'Updating...'
+                : option === 'cancelled'
+                  ? 'Cancel order'
+                  : ORDER_STATUS_LABELS[option]}
+            </button>
+          ))}
+        </>
+      )}
+
       {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={submitting}>
-        {submitting ? 'Updating...' : 'Update status'}
-      </button>
-    </form>
+    </div>
   );
 }

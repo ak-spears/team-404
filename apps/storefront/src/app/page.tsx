@@ -1,25 +1,18 @@
 import { cookies } from 'next/headers';
-import { PRICING_TABLE_CENTS, SERVICE_TYPES, type ServiceType } from '@crimson-copies/shared';
+import type { Order } from '@crimson-copies/shared';
+import { CustomerHome } from '../components/CustomerHome';
+import { PhotoCredit } from '../components/PhotoCredit';
+import { ScrollDock } from '../components/ScrollDock';
+import { ServicesSection } from '../components/ServicesSection';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { auth0 } from '../lib/auth0';
+import { loadConfig } from '../lib/config';
+import { getAuthenticatedUser } from '../lib/customer-identity';
+import { getDisplayIdentity } from '../lib/display-identity';
+import { callOrdersApi } from '../lib/internal-api';
 import { getSession } from '../lib/session';
 
-// department_job's label was slotted in at the top when the quoted-pricing case landed --
-// the rest are still in their original order.
-const SERVICE_LABELS: Record<ServiceType, string> = {
-  department_job: 'Department job (quoted)',
-  poster: 'Poster printing',
-  resume_portfolio: 'Resume / portfolio printing',
-  class_assignment: 'Class assignment (per page)',
-  personal_printing: 'Personal printing (per page)',
-};
-
-function formatPrice(cents: number | null): string {
-  if (cents === null) return 'Quoted by staff';
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 export const dynamic = 'force-dynamic';
-
 interface PageProps {
   searchParams: Promise<{ error?: string }>;
 }
@@ -31,72 +24,92 @@ function getHomePageErrorMessage(error?: string): string | null {
   return null;
 }
 
-/** Public catalog/pricing view. No auth required to browse. */
-export default async function CatalogPage({ searchParams }: PageProps) {
-  const cookieStore = await cookies();
-  const { error } = await searchParams;
-  const flashError = cookieStore.get('ua_email_error')?.value;
-  const homeError = getHomePageErrorMessage(error) || (flashError === 'ua-email-required' ? getHomePageErrorMessage('ua-email-required') : null);
-
+/** Public catalog/pricing view for visitors; signed-in customers get their own home instead. */
+export default async function HomePage({ searchParams }: PageProps) {
   const localSession = await getSession();
   const authSession = await auth0.getSession();
   const signedIn = Boolean(authSession?.user || localSession);
 
+  if (signedIn) {
+    const { userId, role } = await getAuthenticatedUser();
+    if (role === 'customer') {
+      const result = await callOrdersApi<Order[]>({
+        method: 'GET',
+        path: '/api/orders',
+        role,
+        userId,
+        searchParams: { mine: 'true' },
+      });
+      const identity = await getDisplayIdentity();
+      return (
+        <CustomerHome
+          name={identity?.name ?? 'there'}
+          orders={Array.isArray(result.body) ? result.body : []}
+        />
+      );
+    }
+  }
+
+  const cookieStore = await cookies();
+  const { error } = await searchParams;
+  const flashError = cookieStore.get('ua_email_error')?.value;
+  const homeError =
+    getHomePageErrorMessage(error) ||
+    (flashError === 'ua-email-required' ? getHomePageErrorMessage('ua-email-required') : null);
+  const { STAFF_CONSOLE_URL } = loadConfig();
+
   return (
     <>
-
-      {homeError && (
-        <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '0.5rem', background: '#fde7e7', color: '#7f1d1d', border: '1px solid #f5b7b1' }}>
-          {homeError}
+      <section className="hero" data-dock-until>
+        <ScrollDock />
+        {homeError && <p className="error hero-error">{homeError}</p>}
+        <h1 className="hero-title" data-dock="brand">
+          Crimson Copies
+        </h1>
+        <p className="hero-tagline">
+          Order printing, posters, and copies online &mdash; no email required.
+        </p>
+        {/* The theme toggle sits where it does relative to the order/sign-in button so it never
+            crosses it en route: header order is nav (order) | toggle, sign in, staff. */}
+        <div className="hero-actions">
+          {!signedIn && <ThemeToggle data-dock="theme" />}
+          <a href="#catalog" className="btn-ghost" data-dock="catalog">
+            <span data-dock-label>See pricing</span>
+          </a>
+          {signedIn ? (
+            <a href="/order" className="btn-primary" data-dock="order">
+              <span data-dock-label>Place an order</span>
+            </a>
+          ) : (
+            <a href="/auth/login" className="btn-primary" data-dock="signin">
+              <span data-dock-label>Sign in to order</span>
+            </a>
+          )}
+          {signedIn ? (
+            <ThemeToggle data-dock="theme" />
+          ) : (
+            <a href={STAFF_CONSOLE_URL} className="btn-ghost" data-dock="staff">
+              <span data-dock-label>Staff sign in</span>
+            </a>
+          )}
         </div>
-      )}
-
-      <section className="masthead">
-        <h1 className="masthead-title">Crimson Copies</h1>
-        <p className="masthead-tagline">Order printing, posters, and copies -- no email required.</p>
       </section>
 
-      <section className="intro">
-        <h2>Service catalog</h2>
+      <ServicesSection
+        id="catalog"
+        title="Services & prices"
+        lead={
+          signedIn
+            ? 'Upload your files with the order — no more emailing them back and forth.'
+            : 'Sign in to place an order and keep track of your print jobs.'
+        }
+        signedIn={signedIn}
+      />
 
-        {signedIn ? (
-          <p>
-            Submit an order online -- no more emailing files back and forth.{' '}
-            <a href="/order">Place an order</a>, no account required.
-          </p>
-        ) : (
-          <p>Sign in to place an order and manage your print jobs.</p>
-        )}
-
-        {signedIn ? (
-          <a href="/order" className="btn-primary">
-            Place an order
-          </a>
-        ) : (
-          <a href="/auth/login" className="btn-primary">
-            Sign in to order
-          </a>
-        )}
-      </section>
-
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th>Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SERVICE_TYPES.map((serviceType) => (
-              <tr key={serviceType}>
-                <td>{SERVICE_LABELS[serviceType]}</td>
-                <td>{formatPrice(PRICING_TABLE_CENTS[serviceType])}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PhotoCredit
+        subject="Denny Chimes and the Quad, The University of Alabama"
+        source="https://www.ua.edu/wp-content/uploads/quad-home-hero.jpg"
+      />
     </>
   );
 }

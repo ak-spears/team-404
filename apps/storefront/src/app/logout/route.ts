@@ -34,5 +34,5 @@ export async function POST(request: Request): Promise<NextResponse> {
   const proto = request.headers.get('x-forwarded-proto') ?? 'http';
   const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
   const origin = `${proto}://${host}`;
-  return NextResponse.redirect(new URL('/signed-out', origin), { status: 303 });
+  return NextResponse.redirect(new URL('/', origin), { status: 303 });
 }

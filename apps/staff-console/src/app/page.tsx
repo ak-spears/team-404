@@ -1,16 +1,33 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ORDER_STATUSES, type Order, type OrderStatus } from '@crimson-copies/shared';
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUSES,
+  type Order,
+  type OrderStatus,
+} from '@crimson-copies/shared';
+import { OrderList } from '../components/OrderList';
+import type { StaffMember } from '../components/OrderAssignmentTable';
+import { PageBand } from '../components/PageBand';
 import { callOrdersApi } from '../lib/internal-api';
+import { isOpen, sortQueue } from '../lib/labels';
 import { getStaffSession } from '../lib/session';
 
 interface PageProps {
-  //searchParams: Promise<{ status?: string }>;
   searchParams: Promise<{ status?: string; mine?: string }>;
 }
 
 function isOrderStatus(value: string): value is OrderStatus {
   return (ORDER_STATUSES as readonly string[]).includes(value);
+}
+
+/** `?status=` / `?mine=1` link that keeps the other param. */
+function queueHref(status: OrderStatus | undefined, mine: boolean) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (mine) params.set('mine', '1');
+  const query = params.toString();
+  return query ? `/?${query}` : '/';
 }
 
 /** Staff queue -- list/filter orders. Middleware redirects on a missing cookie; this is the
@@ -22,88 +39,106 @@ export default async function QueuePage({ searchParams }: PageProps) {
   const { status: rawStatus, mine } = await searchParams;
   const currentStatus = rawStatus && isOrderStatus(rawStatus) ? rawStatus : undefined;
   const mineActive = mine === '1';
-  /*
-  const apiSearchParams: Record<string, string | undefined> = { status: currentStatus };
-  if (mineActive) {
-    apiSearchParams.assignedTo = String(session.userId);
-  }*/
-  const apiSearchParams: Record<string, string | undefined> = {
-    status: currentStatus,
-  };
 
-  if (mineActive) {
-    apiSearchParams.mine = 'true';
-  }
+  // Fetch every status once and filter here, so the tabs can show counts.
+  const request = { method: 'GET', role: session.role, userId: String(session.userId) } as const;
+  const [ordersResult, staffResult] = await Promise.all([
+    callOrdersApi<Order[]>({
+      ...request,
+      path: '/api/orders',
+      searchParams: mineActive ? { mine: 'true' } : undefined,
+    }),
+    callOrdersApi<StaffMember[]>({ ...request, path: '/api/staff' }),
+  ]);
+  const loadFailed = !Array.isArray(ordersResult.body);
+  const allOrders = Array.isArray(ordersResult.body) ? ordersResult.body : [];
+  const staff = Array.isArray(staffResult.body) ? staffResult.body : [];
 
-  /*
-if (mineActive) {
-  apiSearchParams.assignedTo = String(session.userId);
-}
-*/
-
-  const result = await callOrdersApi<Order[]>({
-    method: 'GET',
-    path: '/api/orders',
-    role: session.role,
-    userId: String(session.userId),
-    searchParams: apiSearchParams,
-  });
-  const orders = Array.isArray(result.body) ? result.body : [];
-
-  const orderRows = [];
-  for (const order of orders) {
-    orderRows.push(
-      <tr key={order.id}>
-        <td>
-          <Link href={`/orders/${order.id}`}>#{order.id}</Link>
-        </td>
-        <td>{order.serviceType}</td>
-        <td>{order.quantity}</td>
-        <td>
-          <span className="badge" data-status={order.status}>
-            {order.status}
-          </span>
-        </td>
-        <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-      </tr>,
-    );
-  }
+  const countOf = (status: OrderStatus) =>
+    allOrders.filter((order) => order.status === status).length;
+  const openCount = allOrders.filter(isOpen).length;
+  const unassignedCount = allOrders.filter((o) => isOpen(o) && o.assignedTo === null).length;
+  const orders = sortQueue(
+    currentStatus ? allOrders.filter((order) => order.status === currentStatus) : allOrders,
+  );
 
   return (
     <>
-      <h1>Staff queue</h1>
-      <form className="filter-form" method="get">
-        <label>
-          Status
-          <select name="status" defaultValue={currentStatus ?? ''}>
-            <option value="">All</option>
-            {ORDER_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit">Filter</button>
-      </form>
-      {orders.length === 0 ? (
-        <p className="muted">No orders match this filter.</p>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Service</th>
-                <th>Qty</th>
-                <th>Status</th>
-                <th>Submitted</th>
-              </tr>
-            </thead>
-            <tbody>{orderRows}</tbody>
-          </table>
-        </div>
+      <PageBand
+        eyebrow={mineActive ? 'Assigned to you' : 'Staff workspace'}
+        title="Order queue"
+        lead={
+          <p>
+            {openCount} open &middot; {countOf('ready_for_pickup')} ready for pickup &middot;{' '}
+            {unassignedCount} unassigned
+          </p>
+        }
+        actions={
+          <>
+            <nav className="segmented" aria-label="Whose orders">
+              <Link
+                href={queueHref(currentStatus, false)}
+                aria-current={!mineActive ? 'page' : undefined}
+              >
+                Everyone
+              </Link>
+              <Link
+                href={queueHref(currentStatus, true)}
+                aria-current={mineActive ? 'page' : undefined}
+              >
+                Mine
+              </Link>
+            </nav>
+            <Link href="/board" className="btn btn-on-crimson">
+              Open board
+            </Link>
+          </>
+        }
+      />
+
+      {allOrders.length > 0 && (
+        <nav className="order-tabs" aria-label="Filter by status">
+          <Link
+            href={queueHref(undefined, mineActive)}
+            aria-current={!currentStatus ? 'page' : undefined}
+          >
+            All <span>{allOrders.length}</span>
+          </Link>
+          {ORDER_STATUSES.map((status) => (
+            <Link
+              key={status}
+              href={queueHref(status, mineActive)}
+              aria-current={currentStatus === status ? 'page' : undefined}
+            >
+              {ORDER_STATUS_LABELS[status]} <span>{countOf(status)}</span>
+            </Link>
+          ))}
+        </nav>
       )}
+
+      <OrderList
+        orders={orders}
+        staff={staff}
+        empty={
+          loadFailed ? (
+            <>
+              <h2>Couldn&apos;t load orders</h2>
+              <p>The orders service didn&apos;t respond. Refresh to try again.</p>
+            </>
+          ) : (
+            <>
+              <h2>Nothing here</h2>
+              <p>
+                {currentStatus
+                  ? `No orders are ${ORDER_STATUS_LABELS[currentStatus].toLowerCase()} right now.`
+                  : mineActive
+                    ? 'Nothing is assigned to you yet.'
+                    : 'No orders yet. New ones show up here as customers place them.'}
+              </p>
+            </>
+          )
+        }
+      />
     </>
   );
 }
