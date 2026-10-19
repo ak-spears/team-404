@@ -14,6 +14,9 @@
   --radius-sm: 3px;
   --radius-md: 4px;
   --radius-lg: 6px;
+  --stripe-h: 10px;
+  --toggle: 3.15rem;
+  --toggle-icon: 25px;
   --shadow-sm: 0 1px 2px rgba(28, 26, 27, 0.05);
   --shadow-md: 0 4px 16px -6px rgba(28, 26, 27, 0.12);
   --error-text: #7a1b1b;
@@ -23,6 +26,23 @@
   --success-bg: #e8f5ec;
   --success-border: #bfe0c9;
   --hover-bg: rgba(28, 26, 27, 0.05);
+  /* Solid crimson behind the header and home hero. They must stay the same colour so the hero
+     can close into the header without a seam. Deeper in dark mode so it doesn't glare. */
+  --brand-surface: #9e1b32;
+  --brand-surface-deep: #84162a;
+  /* Halftone dots (a print-shop nod) in the top-right corner, washed out by a radial layer of
+     the solid brand colour so every other edge stays plain --brand-surface. Shared by the home
+     hero and the customer welcome banner. */
+  --crimson-halftone:
+    radial-gradient(75% 95% at 100% 0%, transparent 0%, var(--brand-surface) 72%),
+    radial-gradient(rgba(255, 255, 255, 0.16) 1.2px, transparent 1.8px) 0 0 / 11px 11px,
+    var(--brand-surface);
+  --font-heading: var(--font-display), Georgia, 'Times New Roman', serif;
+  --on-crimson: #fff;
+  --on-crimson-soft: rgba(255, 255, 255, 0.82);
+  --on-crimson-muted: rgba(255, 255, 255, 0.68);
+  --on-crimson-border: rgba(255, 255, 255, 0.35);
+  --on-crimson-hover: rgba(255, 255, 255, 0.12);
   color-scheme: light;
 }
 
@@ -51,6 +71,8 @@
     --success-bg: #17271b;
     --success-border: #2b4a33;
     --hover-bg: rgba(255, 255, 255, 0.06);
+    --brand-surface: #6e1424;
+    --brand-surface-deep: #5a0f1d;
     color-scheme: dark;
   }
 }
@@ -76,6 +98,8 @@
   --success-bg: #17271b;
   --success-border: #2b4a33;
   --hover-bg: rgba(255, 255, 255, 0.06);
+  --brand-surface: #6e1424;
+  --brand-surface-deep: #5a0f1d;
   color-scheme: dark;
 }
 
@@ -85,16 +109,36 @@
 
 html {
   -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
   margin: 0;
-  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+  font-family:
+    var(--font-sans),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    system-ui,
     sans-serif;
   color: var(--ink);
   background: var(--canvas);
   line-height: 1.55;
   overflow-x: hidden;
+}
+
+/* Brand stripe closing out the bottom of every page. */
+body::after {
+  content: '';
+  display: block;
+  height: var(--stripe-h);
+  background: var(--brand-surface);
 }
 
 a {
@@ -112,22 +156,40 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1.5rem;
-  padding: 1rem 2rem;
-  background: var(--paper);
-  border-bottom: 1px solid var(--border);
+  gap: 1rem 2rem;
+  padding: 1.5rem 2rem;
+  color: var(--on-crimson);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
+/* Background on a pseudo-element so the home hero can fade it in with scroll (--dock). */
+.site-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--brand-surface);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Font, weight, letter-spacing and line-height must match .hero-title so the docking swap is
+   seamless. */
 .site-header .brand {
-  font-weight: 700;
-  color: var(--crimson);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--on-crimson);
   text-decoration: none;
-  font-size: 1.2rem;
+  font-size: 2.3rem;
+  line-height: 1;
   letter-spacing: -0.01em;
   white-space: nowrap;
+}
+
+.site-header .brand:hover {
+  color: var(--on-crimson);
 }
 
 .site-header nav {
@@ -138,47 +200,57 @@ a:hover {
 }
 
 .site-header nav a {
-  color: var(--ink-soft);
+  color: var(--on-crimson-soft);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.9rem;
-  padding: 0.45rem 0.7rem;
+  font-size: 1.35rem;
+  padding: 0.65rem 1rem;
   border-radius: var(--radius-sm);
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .site-header nav a:hover {
-  background: var(--hover-bg);
-  color: var(--ink);
+  background: var(--on-crimson-hover);
+  color: var(--on-crimson);
 }
 
 .header-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
+}
+
+.site-header .theme-toggle svg {
+  width: var(--toggle-icon);
+  height: var(--toggle-icon);
 }
 
 .theme-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: var(--toggle);
+  height: var(--toggle);
   padding: 0;
   background: transparent;
-  color: var(--ink-soft);
-  border: 1px solid var(--border-strong);
+  color: var(--on-crimson-soft);
+  border: 1px solid var(--on-crimson-border);
   border-radius: var(--radius-sm);
   box-shadow: none;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .theme-toggle:hover {
-  background: var(--hover-bg);
-  color: var(--ink);
-  border-color: var(--border-strong);
+  background: var(--on-crimson-hover);
+  color: var(--on-crimson);
+  border-color: var(--on-crimson);
   box-shadow: none;
   transform: none;
 }
@@ -193,42 +265,176 @@ a:hover {
 
 .session-form .muted {
   font-size: 0.85rem;
+  color: var(--on-crimson-muted);
 }
 
 .session-form a {
-  color: var(--ink-soft);
+  color: var(--on-crimson-soft);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.86rem;
-  padding: 0.45rem 0.75rem;
+  font-size: 1.3rem;
+  padding: 0.65rem 1.1rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  border: 1px solid var(--on-crimson-border);
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .session-form a:hover {
-  border-color: var(--ink-soft);
-  color: var(--ink);
-  background: var(--hover-bg);
+  border-color: var(--on-crimson);
+  color: var(--on-crimson);
+  background: var(--on-crimson-hover);
 }
 
 .session-form button {
-  color: var(--ink-soft);
+  color: var(--on-crimson-soft);
   background: transparent;
-  border: 1px solid var(--border-strong);
-  padding: 0.45rem 0.75rem;
-  font-size: 0.86rem;
+  border: 1px solid var(--on-crimson-border);
+  padding: 0.65rem 1.1rem;
+  font-size: 1.3rem;
   border-radius: var(--radius-sm);
   font-weight: 600;
   box-shadow: none;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .session-form button:hover:not(:disabled) {
-  border-color: var(--ink-soft);
-  color: var(--ink);
-  background: var(--hover-bg);
+  border-color: var(--on-crimson);
+  color: var(--on-crimson);
+  background: var(--on-crimson-hover);
   box-shadow: none;
+}
+
+/* -------------------- Account menu --------------------
+   Initial + first name in the header; the full email and session actions live in the menu.
+   Two-class selectors so the global `button:hover:not(:disabled)` styles never win. */
+
+.account {
+  position: relative;
+}
+
+.account .account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  height: var(--toggle);
+  padding: 0 0.9rem 0 0.3rem;
+  color: var(--on-crimson);
+  font-size: 1.3rem;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--on-crimson-border);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.account .account-trigger:hover,
+.account .account-trigger[aria-expanded='true'] {
+  color: var(--on-crimson);
+  background: var(--on-crimson-hover);
+  border-color: var(--on-crimson);
+  transform: none;
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: calc(var(--toggle) - 0.65rem);
+  height: calc(var(--toggle) - 0.65rem);
+  border-radius: 50%;
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--brand-surface);
+  background: var(--on-crimson);
+}
+
+.account-trigger svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.75;
+  transition: transform 0.15s ease;
+}
+
+.account-trigger[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  padding: 0.35rem;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--crimson);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.account-email {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0 0 0.35rem;
+  padding: 0.6rem 0.75rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.account-email span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.account-menu a,
+.account .account-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--ink);
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.account-menu a:hover,
+.account .account-menu button:hover {
+  color: var(--crimson);
+  background: var(--hover-bg);
+  transform: none;
+}
+
+.account-menu form {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .account-name {
+    display: none;
+  }
+
+  .account .account-trigger {
+    padding-right: 0.45rem;
+  }
 }
 
 /* -------------------- Layout -------------------- */
@@ -256,61 +462,1373 @@ h2 {
   margin: 2rem 0 0.75rem;
 }
 
-/* -------------------- Masthead (storefront home) --------------------
-   Full-bleed, edge to edge -- the one place the brand gets a moment, breaking out of the
-   centered column via the standard 100vw/-50vw technique. A soft wash from crimson into the
-   page background, not a saturated banner; sharp edges since it touches the viewport sides. */
+/* -------------------- Hero (storefront home) --------------------
+   Full-viewport crimson gradient, breaking out of the centered column via 100vw/-50vw.
+   ScrollDock flies each [data-dock] element (title + buttons) into its header [data-dock-target],
+   so on this page the header is fixed and transparent over the hero, fading its gradient in as
+   --dock goes 0 -> 1. Targets stay laid out (ScrollDock measures them) but invisible until their
+   source arrives: the brand swaps in on landing (identical text), the buttons crossfade. */
 
-.masthead {
+body:has(.hero) .site-header,
+body:has(.welcome--photo) .site-header {
+  position: fixed;
+  inset: 0 0 auto;
+  border-bottom-color: transparent;
+}
+
+/* The hero (or customer photo band) sits behind the header until its bottom edge arrives at
+   dock = 1, so the header's own background only needs to fade in over the last stretch -- no
+   visible band. */
+body:has(.hero) .site-header::before,
+body:has(.welcome--photo) .site-header::before {
+  opacity: calc((var(--dock, 0) - 0.9) * 10);
+}
+
+/* Identical twins (brand, theme toggle) just swap on landing -- no crossfade. */
+body:has(.hero) .site-header .brand,
+body:has(.hero [data-dock='theme']) .site-header [data-dock-target='theme'] {
+  visibility: hidden;
+}
+
+html[data-docked] body:has(.hero) .site-header .brand,
+html[data-docked] body:has(.hero) .site-header [data-dock-target='theme'] {
+  visibility: visible;
+}
+
+/* Crossfaded targets -- on any page with a docking source (public hero or customer welcome). */
+body:has([data-dock='signin']) .site-header [data-dock-target='signin'],
+body:has([data-dock='staff']) .site-header [data-dock-target='staff'],
+body:has([data-dock='order']) .site-header [data-dock-target='order'],
+body:has([data-dock='orders']) .site-header [data-dock-target='orders'] {
+  opacity: calc((var(--dock, 0) - 0.85) * 6.67);
+}
+
+html[data-docked] [data-dock] {
+  visibility: hidden;
+}
+
+body:has(.hero) main {
+  max-width: 1080px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.hero {
   width: 100vw;
+  min-height: 100svh;
   position: relative;
   left: 50%;
   margin-left: -50vw;
+  padding: 7rem 1.5rem 6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
   text-align: center;
-  padding: 4.5rem 2rem;
-  margin-bottom: 3rem;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--crimson-tint) 0%, var(--canvas) 100%);
+  color: var(--on-crimson);
+  /* Background comes from the shared photo-band rule below. No isolation/z-index here: the
+     docking title must stack above the header. */
+  --band-photo: url('/images/quad-hero.jpg');
+  --band-photo-y: 30%;
+  /* Arched bottom edge that flattens to a straight line exactly as the hero closes into the header. */
+  --hero-curve: calc((1 - var(--dock, 0)) * 4rem);
+  border-bottom-left-radius: 50% var(--hero-curve);
+  border-bottom-right-radius: 50% var(--hero-curve);
 }
 
-.masthead-title {
-  margin: 0 0 0.5rem;
-  font-size: 3rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+.hero-title {
+  position: relative;
+  z-index: 20;
+  width: fit-content;
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(3rem, 12vw, 10.5rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--on-crimson);
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.hero-tagline,
+.hero-error {
+  opacity: calc(1 - var(--dock, 0) * 2.5);
+}
+
+.hero-tagline {
+  margin: 0;
+  max-width: 40ch;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  color: var(--on-crimson-soft);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.hero-actions .btn-primary,
+.welcome-actions .btn-primary,
+.btn-ghost {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  border-radius: var(--radius-sm);
+}
+
+.hero-actions .btn-primary,
+.welcome-actions .btn-primary {
+  background: var(--on-crimson);
+  color: var(--brand-surface);
+  box-shadow: none;
+}
+
+.hero-actions .btn-primary:hover,
+.welcome-actions .btn-primary:hover {
+  background: #f6e9eb;
+  color: var(--brand-surface-deep);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--on-crimson);
+  border: 1px solid var(--on-crimson-border);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.btn-ghost:hover {
+  color: var(--on-crimson);
+  border-color: var(--on-crimson);
+  background: var(--on-crimson-hover);
+}
+
+/* Docking buttons (public hero and customer welcome) morph toward their header counterparts:
+   the solid button thins to the outlined "Sign in" style, the ghost loses its outline like a
+   bare nav link, and the label fades out before the real header text crossfades in. */
+:is(.hero-actions, .welcome-actions) [data-dock] {
+  position: relative;
+  z-index: 20;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition: none;
+}
+
+:is(.hero-actions, .welcome-actions) .btn-primary[data-dock] {
+  background: color-mix(in srgb, var(--on-crimson) calc((1 - var(--dock, 0)) * 100%), transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--on-crimson-border) calc(var(--dock, 0) * 100%), transparent);
+}
+
+/* Lands on a bare nav link, so no outline to grow into. */
+:is(.hero-actions, .welcome-actions) .btn-primary[data-dock='order'] {
+  border-color: transparent;
+}
+
+:is(.hero-actions, .welcome-actions) .btn-primary[data-dock]:hover {
+  background: #f6e9eb;
+}
+
+:is(.hero-actions, .welcome-actions) .btn-ghost[data-dock] {
+  border-color: color-mix(
+    in srgb,
+    var(--on-crimson-border) calc((1 - var(--dock, 0)) * 100%),
+    transparent
+  );
+}
+
+/* The header toggle blown up by --k (hero button height / header toggle size) with the icon in
+   proportion, so ScrollDock's scale lands it pixel-identical to the copy it swaps with. */
+.hero-actions .theme-toggle {
+  --k: 1.04;
+  width: calc(var(--toggle) * var(--k));
+  height: calc(var(--toggle) * var(--k));
+}
+
+.hero-actions .theme-toggle svg {
+  width: calc(var(--toggle-icon) * var(--k));
+  height: calc(var(--toggle-icon) * var(--k));
+}
+
+/* Unlike "See pricing" (whose header link is bare text), the staff link keeps its outline. */
+.hero-actions .btn-ghost[data-dock='staff'] {
+  border-color: var(--on-crimson-border);
+}
+
+/* Tablets: keep the 1.5x header on one row by tightening the nav and dropping the account name
+   (the initial stays). */
+@media (max-width: 900px) {
+  .site-header {
+    column-gap: 1rem;
+  }
+
+  .site-header .brand {
+    font-size: 2rem;
+  }
+
+  .site-header nav a {
+    padding: 0.5rem 0.7rem;
+    font-size: 1.1rem;
+  }
+
+  .account-name {
+    display: none;
+  }
+
+  .account .account-trigger {
+    padding-right: 0.6rem;
+  }
+}
+
+/* One line at every width: compact buttons on small screens, and on phones drop "See pricing"
+   (the only one with no header spot -- the services are right below anyway). */
+@media (max-width: 600px) {
+  .hero-actions {
+    gap: 0.5rem;
+  }
+
+  .hero-actions .btn-primary,
+  .hero-actions .btn-ghost {
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  .hero-actions .theme-toggle {
+    --k: 0.89;
+  }
+}
+
+/* Phones: a compact header that stays on one row, so the hero row docks into a single line. */
+@media (max-width: 480px) {
+  /* Phones can't fit the full 1.5x header on one row; this is the largest that does. */
+  :root {
+    --toggle: 2.4rem;
+    --toggle-icon: 19px;
+  }
+
+  .hero-actions [data-dock='catalog'] {
+    display: none;
+  }
+
+  .hero-actions .theme-toggle {
+    --k: 1.17;
+  }
+
+  .site-header {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 1.1rem 1rem;
+  }
+
+  .site-header .brand {
+    font-size: 1.55rem;
+    white-space: nowrap;
+  }
+
+  .site-header nav {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .site-header nav a {
+    padding: 0.5rem 0.6rem;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+
+  .account .account-trigger {
+    font-size: 1rem;
+  }
+
+  .account-avatar {
+    font-size: 1.2rem;
+  }
+
+  /* Already in the account menu; no room for it on a phone. */
+  .site-header nav [data-dock-target='orders'] {
+    display: none;
+  }
+
+  .header-actions,
+  .session-form {
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+  }
+
+  .session-form a,
+  .session-form button {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+  }
+}
+
+[data-dock-label] {
+  display: inline-block;
+  opacity: calc(1 - (var(--dock, 0) - 0.35) * 2);
+}
+
+.hero-error {
+  margin: 0;
+}
+
+/* -------------------- Service cards (storefront home) -------------------- */
+
+.services {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.25rem, 3vh, 2.5rem) 0;
+}
+
+/* Public home: exactly one viewport minus the header (and the bottom stripe), so the page ends
+   right where the hero finishes docking: header in place, all of the services visible beneath
+   it. The grid stretches into any spare height; taller content just scrolls on as normal.
+   scroll-margin sits a hair under the header height so "See pricing" lands fully docked. */
+body:has(.hero) .services {
+  min-height: calc(100svh - var(--header-h, 4.5rem) - var(--stripe-h));
+  scroll-margin-top: calc(var(--header-h, 4.5rem) - 2px);
+}
+
+/* On pages with a band photo, its credit *is* the bottom brand stripe: it replaces body::after
+   and thickens it just enough for one line of small text. */
+body:has(.photo-credit) {
+  --stripe-h: 1.75rem;
+}
+
+body:has(.photo-credit)::after {
+  display: none;
+}
+
+body:has(.photo-credit) main {
+  padding-bottom: 0;
+}
+
+/* Customer home: keep main's usual breathing room above the stripe. */
+body:has(.welcome) .photo-credit {
+  margin-top: 4rem;
+}
+
+.photo-credit {
+  position: relative;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100vw;
+  height: var(--stripe-h);
+  margin: 0 0 0 -50vw;
+  padding: 0 1rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  /* Plain white in both themes -- the stripe is crimson either way. */
+  color: #fff;
+  background: var(--brand-surface);
+}
+
+.photo-credit a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.55);
+  text-underline-offset: 2px;
+}
+
+.photo-credit a:hover {
+  color: #fff;
+  text-decoration-color: #fff;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin: 0 0 clamp(1rem, 2.5vh, 1.75rem);
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--ink);
+}
+
+.section-head h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.section-head p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--ink-soft);
+}
+
+/* Featured card (spans 2) + 4 priced cards: 2 cols -> featured row + 2x2, 3 cols -> two full
+   rows of 3. Fixed columns rather than auto-fit so no card is ever orphaned on its own row.
+   Auto rows stretch to share the section's spare height, so it lands inside the cards. */
+.service-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 560px) {
+  .service-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .service-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: clamp(1.1rem, 2.5vh, 1.75rem) 1.5rem clamp(1rem, 2vh, 1.25rem);
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--crimson);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.service-card:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+  border-top-color: var(--crimson);
+}
+
+/* Title pinned top, price/blurb/CTA pinned bottom: extra card height opens up between them. */
+.service-head {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.service-head h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(1.25rem, 5vh - 1.25rem, 2rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.service-price {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.service-price strong {
+  font-family: var(--font-heading);
+  font-size: clamp(1.6rem, 12vh - 4.4rem, 3.5rem);
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--crimson);
 }
 
-.masthead-tagline {
+/* Two-line minimum keeps prices on one baseline across a row. */
+.service-blurb {
+  min-height: 3em;
   margin: 0;
+  font-size: clamp(0.92rem, 1.6vh, 1.05rem);
+  line-height: 1.5;
   color: var(--ink-soft);
-  font-size: 1.05rem;
 }
 
-/* -------------------- Catalog intro (storefront home) -------------------- */
+.service-cta {
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--crimson);
+}
 
-.intro {
-  margin-bottom: 2.25rem;
-  padding-bottom: 2rem;
+.service-card:hover .service-cta {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Quoted services: tinted rather than a solid block of colour. From 560px up it's a
+   double-width lead card (title/price left, blurb/CTA right, so it stays as short as its
+   neighbours). */
+.service-card--featured {
+  background: var(--crimson-tint);
+  border-color: var(--crimson-tint-strong);
+  border-top-color: var(--crimson);
+}
+
+.service-card--featured:hover {
+  border-color: var(--crimson-tint-strong);
+  border-top-color: var(--crimson);
+}
+
+@media (min-width: 560px) {
+  .service-card--featured {
+    grid-column: span 2;
+    display: grid;
+    grid-template: 'head blurb' 1fr 'head cta' auto / 1fr 1fr;
+    gap: 1rem 2rem;
+  }
+
+  .service-card--featured h3 {
+    font-size: clamp(1.6rem, 7vh - 1.9rem, 3rem);
+  }
+
+  .service-card--featured .service-blurb {
+    max-width: 46ch;
+    font-size: 1rem;
+  }
+
+  .service-card--featured .service-cta {
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--crimson);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+  }
+
+  .service-card--featured .service-head {
+    grid-area: head;
+  }
+
+  .service-card--featured .service-blurb {
+    grid-area: blurb;
+    align-self: end;
+  }
+
+  .service-card--featured .service-cta {
+    grid-area: cta;
+    justify-self: start;
+  }
+}
+
+/* -------------------- Customer home --------------------
+   Same surfaces as the public home (crimson halftone, Crimson Pro, service cards) but laid out
+   as a working page: a short left-aligned welcome band instead of the full-screen hero. */
+
+body:has(.welcome) main {
+  max-width: 1080px;
+  padding-top: 0;
+}
+
+/* Header and welcome band are the same crimson -- no seam between them. */
+body:has(.welcome) .site-header {
+  border-bottom: 0;
+}
+
+body:has(.welcome) .site-header::before {
+  box-shadow: none;
+}
+
+.welcome {
+  position: relative;
+  left: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  /* Content lines up with main's column (1080px max, 2rem gutters). */
+  padding: clamp(2.5rem, 7vh, 4.5rem) max(2rem, calc((100vw - 1080px) / 2 + 2rem)) 3.75rem;
+  color: var(--on-crimson);
+  background: var(--crimson-halftone);
+  /* Flattens to a straight line exactly as the band closes into the header. */
+  --welcome-curve: calc((1 - var(--dock, 0)) * 1.75rem);
+  border-bottom-left-radius: 50% var(--welcome-curve);
+  border-bottom-right-radius: 50% var(--welcome-curve);
+}
+
+/* Campus photo as texture behind the crimson (public hero, customer welcome): recolored to the
+   brand hue (luminosity blend over the base color) and veiled, with the halftone corner on top.
+   Fades to plain --brand-surface at the bottom edge, so the band meets the header without a
+   seam when it docks. Set --band-photo (and optionally --band-photo-y) per band. */
+.hero,
+.welcome--photo {
+  --band-veil: color-mix(in srgb, var(--brand-surface) 62%, transparent);
+  background:
+    linear-gradient(to bottom, transparent 40%, var(--brand-surface) 100%),
+    radial-gradient(
+      75% 95% at 100% 0%,
+      transparent 0%,
+      color-mix(in srgb, var(--brand-surface) 45%, transparent) 72%
+    ),
+    radial-gradient(rgba(255, 255, 255, 0.16) 1.2px, transparent 1.8px) 0 0 / 11px 11px,
+    linear-gradient(var(--band-veil), var(--band-veil)),
+    var(--band-photo) center var(--band-photo-y, 50%) / cover no-repeat,
+    var(--brand-surface);
+  background-blend-mode: normal, normal, normal, normal, luminosity;
+}
+
+/* The header floats over this band (see above), so the band starts at the top of the page and
+   pads its content down past the header. */
+.welcome--photo {
+  --band-photo: url('/images/hewson-hall.jpg');
+  --band-photo-y: 45%;
+  padding-top: calc(var(--header-h, 4.5rem) + clamp(2.5rem, 7vh, 4.5rem));
+}
+
+.welcome-eyebrow,
+.welcome h1,
+.welcome-summary {
+  opacity: calc(1 - var(--dock, 0) * 1.8);
+}
+
+.welcome-eyebrow {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--on-crimson-muted);
+}
+
+.welcome h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(2.4rem, 5.5vw, 3.9rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.welcome-summary {
+  margin: 0.85rem 0 0;
+  max-width: 46ch;
+  font-size: clamp(1.02rem, 1.6vw, 1.2rem);
+  color: var(--on-crimson-soft);
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.dash-section {
+  padding-top: clamp(2rem, 5vh, 3rem);
+}
+
+.section-link {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--crimson);
+  text-decoration: none;
+}
+
+.section-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.order-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-row {
+  display: grid;
+  grid-template-columns: 3.75rem 1fr auto 9.5rem;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 1.25rem;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.order-row:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+/* The one a customer came back for: crimson edge, tinted surface. */
+.order-row[data-status='ready_for_pickup'] {
+  background: var(--crimson-tint);
+  border-color: var(--crimson-tint-strong);
+  border-left-color: var(--crimson);
+}
+
+.order-row[data-status='completed'],
+.order-row[data-status='cancelled'] {
+  border-left-color: var(--border);
+}
+
+.order-row-id {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--crimson);
+}
+
+.order-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.order-row-main strong {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.order-row-main span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Pinned to the last column: cancelled rows have no meter to hold its place. */
+.order-row .badge {
+  grid-column: -2;
+  justify-self: end;
+}
+
+.step-meter {
+  display: flex;
+  gap: 3px;
+}
+
+.step-meter span {
+  width: 1.25rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.step-meter span[data-on] {
+  background: var(--crimson);
+}
+
+/* Narrow: id + title on top, meter and badge on a second line. */
+@media (max-width: 640px) {
+  .order-row {
+    grid-template-columns: auto 1fr;
+    grid-template-areas: 'id main' 'meter badge';
+  }
+
+  .order-row-id {
+    grid-area: id;
+  }
+
+  .order-row-main {
+    grid-area: main;
+  }
+
+  .step-meter {
+    grid-area: meter;
+  }
+
+  .order-row .badge {
+    grid-area: badge;
+  }
+}
+
+.order-empty {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.order-empty p {
+  margin: 0 0 0.6rem;
+}
+
+.order-empty a {
+  font-weight: 600;
+  color: var(--crimson);
+  text-decoration: none;
+}
+
+/* -------------------- Working pages (place an order, my orders) --------------------
+   Same crimson band as the customer home, compacted, with the page's actions on the right. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.site-header nav a[aria-current='page'] {
+  color: var(--on-crimson);
+  background: var(--on-crimson-hover);
+}
+
+.welcome--compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem 2rem;
+  padding-top: clamp(1.5rem, 4.5vh, 2.75rem);
+  padding-bottom: 2.6rem;
+}
+
+.welcome--compact h1 {
+  font-size: clamp(2rem, 4.5vw, 3rem);
+}
+
+.welcome--compact .welcome-summary {
+  margin-top: 0.6rem;
+  font-size: clamp(0.98rem, 1.4vw, 1.08rem);
+}
+
+.welcome--compact .welcome-actions {
+  margin-top: 0;
+}
+
+.order-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.25rem;
+  overflow-x: auto;
   border-bottom: 1px solid var(--border);
 }
 
-.intro h2 {
-  font-size: 1.4rem;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.75rem;
+.order-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: -1px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.order-tabs a:hover {
   color: var(--ink);
 }
 
-.intro p {
-  color: var(--ink-soft);
-  max-width: 52ch;
-  margin: 0 0 1.5rem;
-  font-size: 1.02rem;
+.order-tabs a[aria-current='page'] {
+  color: var(--crimson);
+  border-bottom-color: var(--crimson);
 }
 
-.intro .btn-primary {
+.order-tabs-count {
+  min-width: 1.5rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.75rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.order-tabs a[aria-current='page'] .order-tabs-count {
+  color: var(--crimson);
+  background: var(--crimson-tint);
+  border-color: var(--crimson-tint-strong);
+}
+
+/* ---- Order form: numbered step cards + a sticky live summary ---- */
+
+.order-builder {
+  padding-top: clamp(1.75rem, 4vh, 2.5rem);
+}
+
+.order-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  align-items: start;
+  gap: 1.5rem;
+}
+
+.order-steps {
+  display: grid;
+  gap: 1rem;
+}
+
+.form-step {
+  min-width: 0;
+  margin: 0;
+  padding: 1.5rem;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Floated so the legend sits inside the card instead of notching its border. */
+.form-step legend {
+  float: left;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  margin: 0 0 1.1rem;
+  padding: 0;
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.form-step-num {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--crimson);
+  background: var(--crimson-tint);
+  border-radius: 50%;
+}
+
+.form-step-hint {
+  clear: both;
+  margin: -0.6rem 0 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.form-step-body {
+  clear: both;
+  display: grid;
+  gap: 1.15rem;
+}
+
+.form-step textarea {
+  resize: vertical;
+}
+
+.optional {
+  margin-left: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* ---- Radio tiles ---- */
+
+.choice-group--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.6rem;
+}
+
+.choice-group--pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.choice {
+  position: relative;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  color: var(--ink);
+  cursor: pointer;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.choice-group--pills .choice {
+  padding: 0.55rem 1.15rem;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice:hover {
+  border-color: var(--crimson);
+}
+
+.choice:has(input:checked) {
+  background: var(--crimson-tint);
+  border-color: var(--crimson);
+  box-shadow: inset 0 0 0 1px var(--crimson);
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--crimson);
+  outline-offset: 2px;
+}
+
+.choice-title {
+  font-family: var(--font-heading);
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.choice-group--pills .choice-title {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+}
+
+.choice-meta {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.choice:has(input:checked) .choice-meta {
+  color: var(--crimson);
+}
+
+/* ---- Quantity stepper (two-class selectors beat the global button styles) ---- */
+
+.stepper-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stepper {
   display: inline-flex;
+  width: max-content;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.stepper:focus-within {
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px var(--crimson-tint-strong);
+}
+
+.stepper-field .stepper button {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  width: 2.6rem;
+  padding: 0;
+  font-size: 1.15rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.stepper-field .stepper button:hover:not(:disabled) {
+  color: var(--crimson);
+  background: var(--hover-bg);
+}
+
+.stepper input {
+  width: 4.5rem;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  border: 0;
+  border-inline: 1px solid var(--border);
+  border-radius: 0;
+  appearance: textfield;
+}
+
+.stepper input::-webkit-inner-spin-button,
+.stepper input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.stepper input:focus {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* ---- Drop zone ---- */
+
+.file-drop-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.file-drop {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.1rem 1.25rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--canvas);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.file-drop svg {
+  flex: none;
+}
+
+.file-drop:hover,
+.file-drop[data-over] {
+  color: var(--crimson);
+  background: var(--crimson-tint);
+  border-color: var(--crimson);
+}
+
+.file-drop[data-filled] {
+  color: var(--crimson);
+  background: var(--crimson-tint);
+  border-style: solid;
+  border-color: var(--crimson-tint-strong);
+}
+
+.file-drop:has(input:focus-visible) {
+  outline: 2px solid var(--crimson);
+  outline-offset: 2px;
+}
+
+.file-drop-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.file-drop-text strong {
+  font-size: 0.92rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.file-drop-text u {
+  color: var(--crimson);
+  text-underline-offset: 3px;
+}
+
+.file-drop-text span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.file-drop-field .file-drop-clear {
+  justify-self: start;
+  padding: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.file-drop-field .file-drop-clear:hover:not(:disabled) {
+  color: var(--crimson);
+  background: transparent;
+}
+
+/* ---- Summary ---- */
+
+.order-summary {
+  position: sticky;
+  top: 5.75rem;
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.5rem;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--crimson);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.order-summary h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
+.summary-line span {
+  color: var(--muted);
+}
+
+.summary-line strong {
+  min-width: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.summary-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.summary-total span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.summary-total strong {
+  font-family: var(--font-heading);
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--crimson);
+}
+
+.summary-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.order-summary button[type='submit'] {
+  align-self: stretch;
+  margin-top: 0.35rem;
+  padding: 0.85rem;
+  font-size: 1rem;
+}
+
+.order-placed {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  max-width: 32rem;
+  margin: clamp(2rem, 6vh, 3.5rem) auto 0;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.order-placed h2 {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+}
+
+.order-placed .upload-progress {
+  width: 100%;
+}
+
+.order-placed-check {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.4rem;
+  color: #fff;
+  background: var(--crimson);
+  border-radius: 50%;
+}
+
+/* Summary drops under the steps (no longer sticky) once there's no room beside them. */
+@media (max-width: 860px) {
+  .order-form {
+    grid-template-columns: 1fr;
+  }
+
+  .order-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-step {
+    padding: 1.25rem;
+  }
+
+  .choice-group--cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .choice {
+    padding: 0.75rem 0.8rem;
+  }
+
+  .welcome--compact .welcome-actions {
+    width: 100%;
+  }
 }
 
 /* -------------------- Card surfaces --------------------
@@ -412,7 +1930,9 @@ textarea {
   font: inherit;
   color: var(--ink);
   background: var(--paper);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 input:focus,
@@ -437,7 +1957,9 @@ button,
   cursor: pointer;
   align-self: flex-start;
   text-decoration: none;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
   box-shadow: var(--shadow-sm);
 }
 
@@ -588,7 +2110,9 @@ dd {
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .google-signin-btn:hover {

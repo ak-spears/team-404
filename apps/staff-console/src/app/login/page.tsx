@@ -137,9 +137,10 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const loginError = getLoginErrorMessage(error);
 
   return (
-    <>
-      <h1>You&apos;re not signed in</h1>
-      <p className="muted">Sign in with your staff account to see the order queue.</p>
+    <section className="auth-card">
+      <p className="auth-eyebrow">Staff workspace</p>
+      <h1>Sign in</h1>
+      <p className="muted">Use your staff account to see the order queue.</p>
       {loginError && <p className="error">{loginError}</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />
@@ -151,11 +152,17 @@ export default async function LoginPage({ searchParams }: PageProps) {
           Password
           <input type="password" name="password" required autoComplete="current-password" />
         </label>
-        <button type="submit">Sign in</button>
+        <button type="submit" className="btn btn-primary">
+          Sign in
+        </button>
+        <p className="auth-divider">
+          <span>or</span>
+        </p>
         <a href={buildGoogleAuthUrl()} className="google-signin-btn">
-          <GoogleIcon />Sign in with Google
+          <GoogleIcon />
+          Sign in with Google
         </a>
       </form>
-    </>
+    </section>
   );
 }

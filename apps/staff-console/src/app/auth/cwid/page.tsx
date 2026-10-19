@@ -77,7 +77,8 @@ export default async function CwidPage({ searchParams }: PageProps) {
   const { error } = await searchParams;
 
   return (
-    <>
+    <section className="auth-card">
+      <p className="auth-eyebrow">One more step</p>
       <h1>Enter your CWID</h1>
       <p className="muted">
         Your Google account is not a UA email. Enter your Campus-Wide ID to finish signing in.
@@ -96,8 +97,10 @@ export default async function CwidPage({ searchParams }: PageProps) {
             autoFocus
           />
         </label>
-        <button type="submit">Continue</button>
+        <button type="submit" className="btn btn-primary">
+          Continue
+        </button>
       </form>
-    </>
+    </section>
   );
 }

@@ -1,14 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { Crimson_Pro, Plus_Jakarta_Sans } from 'next/font/google';
 import { cookies } from 'next/headers';
 import './globals.css';
+import { AccountMenu } from '../components/AccountMenu';
+import { NavLink } from '../components/NavLink';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { BASE_PATH } from '../lib/base-path';
-//import { loadConfig } from '../lib/config';
 import { getStaffSession } from '../lib/session';
 
 const fontSans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans' });
+const fontDisplay = Crimson_Pro({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-display',
+});
 
 export const metadata: Metadata = {
   title: 'Crimson Copies -- Staff',
@@ -17,7 +22,6 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getStaffSession();
-  //const { STOREFRONT_URL } = loadConfig();
 
   // Read the saved theme cookie server-side so the very first byte of HTML already has the
   // right data-theme attribute -- no client script race, no flash on full page navigations.
@@ -27,32 +31,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = themeCookie === 'light' || themeCookie === 'dark' ? themeCookie : undefined;
 
   return (
-    <html lang="en" className={fontSans.variable} data-theme={theme}>
+    <html lang="en" className={`${fontSans.variable} ${fontDisplay.variable}`} data-theme={theme}>
       <body>
         <header className="site-header">
           {/* next/link is basePath-aware; this resolves to /staff -- the staff queue. */}
           <Link href="/" className="brand">
-            Crimson Copies -- Staff
+            Crimson Copies <span className="brand-tag">Staff</span>
           </Link>
           <nav>
-            {/* Queue is the staff "home". Hidden until a staff member signs in. */}
             {session && (
               <>
-                <Link href="/">Queue</Link>
-                <Link href="/board">Board</Link>
-                <Link href="/admin">Admin Page</Link>
+                <NavLink href="/">Queue</NavLink>
+                <NavLink href="/board">Board</NavLink>
+                <NavLink href="/my-workload">My work</NavLink>
+                <NavLink href="/admin">Admin</NavLink>
               </>
             )}
           </nav>
           <div className="header-actions">
             <ThemeToggle />
-            {session && (
-              // Plain <form action> is NOT rewritten by Next -- prefix it explicitly.
-              <form action={`${BASE_PATH}/logout`} method="POST" className="session-form">
-                <span className="muted">Signed in as {session.username}</span>
-                <button type="submit">Log out</button>
-              </form>
-            )}
+            {session && <AccountMenu username={session.username} />}
           </div>
         </header>
         <main>{children}</main>
