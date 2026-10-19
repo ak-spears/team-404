@@ -6,12 +6,14 @@ import { loadConfig } from './config';
 export type SessionRole = 'customer' | 'staff';
 
 export interface SessionPayload {
-   username: string;
+  userId: number;
+  username: string;
   role: SessionRole;
   iat: number;
   /** Set after Google login with a non-UA email until the user submits a CWID. */
   pendingCwid?: boolean;
 }
+
 export const SESSION_COOKIE_NAME = 'cc_session';
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const ADMIN_COOKIE_NAME = 'cc_admin';

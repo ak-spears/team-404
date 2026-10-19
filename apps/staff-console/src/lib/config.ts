@@ -22,8 +22,8 @@ const envSchema = z.object({
         : 'http://localhost:3001',
     ),
   INTERNAL_API_KEY: z.string().min(1, 'INTERNAL_API_KEY is required'),
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  APP_BASE_URL: z.string().url().default(DEFAULT_APP_BASE_URL),
+  //GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  //APP_BASE_URL: z.string().url().default(DEFAULT_APP_BASE_URL),
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // storefront, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
