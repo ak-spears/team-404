@@ -6,14 +6,12 @@ import { loadConfig } from './config';
 export type SessionRole = 'customer' | 'staff';
 
 export interface SessionPayload {
-  userId: number;
-  username: string;
+   username: string;
   role: SessionRole;
   iat: number;
   /** Set after Google login with a non-UA email until the user submits a CWID. */
   pendingCwid?: boolean;
 }
-
 export const SESSION_COOKIE_NAME = 'cc_session';
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const ADMIN_COOKIE_NAME = 'cc_admin';
@@ -75,7 +73,7 @@ export function verifySessionCookieValue(value: string | undefined): SessionPayl
 export async function getStaffSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
-  if (session?.role !== 'staff') return null;
+  if (!session || session.pendingCwid || session.role !== 'staff') return null;
 
   try {
     const result = await callOrdersApi<{ isStaff: boolean }>({
@@ -87,6 +85,13 @@ export async function getStaffSession(): Promise<SessionPayload | null> {
   } catch {
     return null;
   }
+}
+
+/** Session that still needs a CWID before it counts as fully signed in. */
+export async function getPendingCwidSession(): Promise<SessionPayload | null> {
+  const store = await cookies();
+  const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
+  return session?.pendingCwid ? session : null;
 }
 
 export function createAdminCookieValue(): string {
