@@ -66,9 +66,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         <h1 className="hero-title" data-dock="brand">
           Crimson Copies
         </h1>
-        <p className="hero-tagline">
-          Order printing, posters, and copies online &mdash; no email required.
-        </p>
+        <p className="hero-tagline">Order printing, posters, and copies online.</p>
         {/* The theme toggle sits where it does relative to the order/sign-in button so it never
             crosses it en route: header order is nav (order) | toggle, sign in, staff. */}
         <div className="hero-actions">
