@@ -201,18 +201,11 @@ export function registerInternalRoutes(app: FastifyInstance, options: InternalRo
         return reply.code(400).send({ error: 'validation_failed', issues: parsed.error.issues });
       }
 
-      // Exchange the authorization code for Google's ID token.
-      const oauthClient = new OAuth2Client(
-        options.config.GOOGLE_CLIENT_ID,
-        options.config.GOOGLE_CLIENT_SECRET,
+      const payload = await verifyGoogleIdToken(
+        options.config,
+        parsed.data.code,
         parsed.data.redirectUri,
       );
-      const { tokens } = await oauthClient.getToken(parsed.data.code);
-      const ticket = await oauthClient.verifyIdToken({
-        idToken: tokens.id_token!,
-        audience: options.config.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
       if (!payload?.email || !payload.sub) {
         return reply.code(401).send({ error: 'invalid_google_token' });
       }
