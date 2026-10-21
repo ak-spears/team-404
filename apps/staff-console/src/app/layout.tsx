@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Crimson_Pro, Plus_Jakarta_Sans } from 'next/font/google';
 import { cookies } from 'next/headers';
+import './globals.css'; 
 import './globals.css';
 import { AccountMenu } from '../components/AccountMenu';
 import { NavLink } from '../components/NavLink';

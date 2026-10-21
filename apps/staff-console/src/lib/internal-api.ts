@@ -1,9 +1,9 @@
-import { loadConfig } from "./config";
+import { loadConfig } from './config';
 
-export type InternalRole = "customer" | "staff";
+export type InternalRole = 'customer' | 'staff';
 
 export interface InternalFetchOptions {
-  method: "GET" | "POST" | "PATCH";
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
   // Omitted for the pre-login credential check, where there's no session yet to derive a role
   // from.
@@ -40,11 +40,11 @@ export async function callOrdersApi<T = unknown>(
   }
 
   const headers: Record<string, string> = {
-    "X-Internal-Key": config.INTERNAL_API_KEY,
+    'X-Internal-Key': config.INTERNAL_API_KEY,
   };
-  if (options.role) headers["X-User-Role"] = options.role;
-  if (options.userId) headers["X-User-Id"] = options.userId;
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.role) headers['X-User-Role'] = options.role;
+  if (options.userId) headers['X-User-Id'] = options.userId;
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
   const response = await fetch(url, {
     method: options.method,

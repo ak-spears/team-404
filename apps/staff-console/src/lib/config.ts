@@ -21,10 +21,16 @@ const envSchema = z.object({
   // Signs the session cookie (see lib/session.ts). Unique to this app -- never shared with
   // storefront, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
-  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  // Optional: password login still works when unset. Login and the Google callback already
+  // treat a missing client ID as "Google sign-in is not configured."
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   // Bare origin (no /staff) -- BASE_PATH is added by hand when building the OAuth redirect URI,
   // same as everywhere else in this app that has to prefix a URL manually (see lib/base-path.ts).
-  APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),
+  APP_BASE_URL: z.string().url().default(
+    process.env.NODE_ENV === 'production'
+      ? 'https://team-404.capstone.uamishub.com'
+      : 'http://localhost:3001',
+  ),
   // The main Crimson Copies site: the "Home" header link and the post-logout destination.
   STOREFRONT_URL: z.string().default(DEFAULT_STOREFRONT_URL),
   MINIO_ENDPOINT: z.string().default('localhost'),

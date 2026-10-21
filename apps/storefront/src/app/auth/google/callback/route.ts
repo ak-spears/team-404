@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { callOrdersApi } from '../../../../lib/internal-api';
-import { createSessionCookieValue, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from '../../../../lib/session';
+import {
+  createSessionCookieValue,
+  SESSION_COOKIE_NAME,
+  SESSION_TTL_SECONDS,
+} from '../../../../lib/session';
 import { loadConfig } from '../../../../lib/config';
 
 interface GoogleAuthResponseBody {
@@ -13,6 +17,9 @@ interface GoogleAuthResponseBody {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const config = loadConfig();
+  if (!config.GOOGLE_CLIENT_ID) {
+    return NextResponse.redirect(new URL('/login?error=google-unavailable', config.APP_BASE_URL));
+  }
   const REDIRECT_URI = `${config.APP_BASE_URL}/auth/google/callback`;
 
   const code = request.nextUrl.searchParams.get('code');
