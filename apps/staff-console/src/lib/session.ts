@@ -1,6 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { callOrdersApi } from './internal-api';
 import { loadConfig } from './config';
 
 export type SessionRole = 'customer' | 'staff';
@@ -75,25 +74,16 @@ export function verifySessionCookieValue(value: string | undefined): SessionPayl
 export async function getStaffSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
-  if (!session || session.pendingCwid || session.role !== 'staff') return null;
-
-  try {
-    const result = await callOrdersApi<{ isStaff: boolean }>({
-      method: 'GET',
-      path: '/internal/auth/is-staff',
-      searchParams: { userId: String(session.userId) },
-    });
-    return result.status === 200 && result.body.isStaff ? session : null;
-  } catch {
-    return null;
-  }
+  if (!session || session.pendingCwid) return null;
+  return session.role === 'staff' ? session : null;
 }
 
-/** Session that still needs a CWID before it counts as fully signed in. */
+/** Session that still needs a CWID before it counts as a full login. */
 export async function getPendingCwidSession(): Promise<SessionPayload | null> {
   const store = await cookies();
-  const session = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
-  return session?.pendingCwid ? session : null;
+  const payload = verifySessionCookieValue(store.get(SESSION_COOKIE_NAME)?.value);
+  if (!payload?.pendingCwid) return null;
+  return payload;
 }
 
 export function createAdminCookieValue(): string {
