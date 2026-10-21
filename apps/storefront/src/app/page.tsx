@@ -28,11 +28,26 @@ function getHomePageErrorMessage(error?: string): string | null {
 export default async function HomePage({ searchParams }: PageProps) {
   const localSession = await getSession();
   const authSession = await auth0.getSession();
-  const signedIn = Boolean(authSession?.user || localSession);
+
+
+
+console.log('Local session exists:', Boolean(localSession));
+console.log('Auth0 session exists:', Boolean(authSession));
+console.log('Auth0 email:', authSession?.user?.email);
+
+const signedIn = Boolean(authSession?.user || localSession);
+console.log('Signed in:', signedIn);
+
+
+
+
+
+
+  //const signedIn = Boolean(authSession?.user || localSession);
 
   if (signedIn) {
     const { userId, role } = await getAuthenticatedUser();
-    if (role === 'customer') {
+    if (role === 'customer' || role === 'staff') {
       const result = await callOrdersApi<Order[]>({
         method: 'GET',
         path: '/api/orders',
@@ -41,6 +56,10 @@ export default async function HomePage({ searchParams }: PageProps) {
         searchParams: { mine: 'true' },
       });
       const identity = await getDisplayIdentity();
+
+      console.log('Authenticated identity:', identity);
+
+
       return (
         <CustomerHome
           name={identity?.name ?? 'there'}
