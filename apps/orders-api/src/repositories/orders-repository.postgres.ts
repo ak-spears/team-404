@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
 import {
   calculatePriceCents,
   isValidStatusTransition,
@@ -91,7 +91,8 @@ export interface RegisterUploadedFileResult {
 export type VerifyUploadCredentialResult = { valid: true; orderId: number } | { valid: false };
 
 export type VerifyUserCredentialsResult =
-  { valid: true; userId: number; username: string; role: 'customer' | 'staff' } | { valid: false };
+  | { valid: true; userId: number; username: string; role: 'customer' | 'staff' }
+  | { valid: false };
 
 export interface UpdateOrderStatusParams {
   orderId: number;
@@ -120,20 +121,13 @@ export interface OrderFileRecord {
 
 export interface OrdersRepository {
   listStaffMembers(): Promise<Array<{ id: number; username: string }>>;
-  createStaffMember(
-    email: string,
-  ): Promise<{ id: number; username: string } | null>;
-  isStaffUser(userId: number): Promise<boolean>;
-  removeStaffMember(userId: number, removedByUserId: number): Promise<boolean>;
   createOrder(params: CreateOrderParams): Promise<CreateOrderResult>;
   getOrderById(id: number): Promise<OrderRecord | null>;
   getOrderWithCustomerById(id: number): Promise<OrderWithCustomer | null>;
   listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]>;
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   getOrderFile(orderId: number, fileId: number): Promise<OrderFileRecord | null>;
-  registerUploadedFile(
-    params: RegisterUploadedFileParams,
-  ): Promise<RegisterUploadedFileResult | null>;
+  registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
@@ -206,86 +200,6 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .from(users)
         .where(eq(users.role, 'staff'))
         .orderBy(users.username);
-    },
-
-    async createStaffMember(email) {
-      const normalizedEmail = email.trim().toLowerCase();
-      return db.transaction(async (tx) => {
-        const [existingIdentity] = await tx
-          .select()
-          .from(googleIdentities)
-          .where(sql`lower(${googleIdentities.email}) = ${normalizedEmail}`)
-          .limit(1);
-
-        if (existingIdentity) {
-          const [existingUser] = await tx
-            .select({ id: users.id, username: users.username, role: users.role })
-            .from(users)
-            .where(eq(users.id, existingIdentity.userId))
-            .limit(1);
-          if (!existingUser || existingUser.role !== 'staff') return null;
-          return { id: existingUser.id, username: existingUser.username };
-        }
-
-        const [existingUser] = await tx
-          .select({ id: users.id, username: users.username, role: users.role })
-          .from(users)
-          .where(sql`lower(${users.username}) = ${normalizedEmail}`)
-          .limit(1);
-        if (existingUser && existingUser.role !== 'staff') return null;
-        const user = existingUser
-          ? { id: existingUser.id, username: existingUser.username }
-          : await tx
-              .insert(users)
-              .values({ username: normalizedEmail, passwordHash: null, role: 'staff' })
-              .returning({ id: users.id, username: users.username })
-              .then(([created]) => created!);
-
-        return user;
-      });
-    },
-
-    async isStaffUser(userId) {
-      const [user] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(and(eq(users.id, userId), eq(users.role, 'staff')))
-        .limit(1);
-      return Boolean(user);
-    },
-
-    async removeStaffMember(userId, removedByUserId) {
-      return db.transaction(async (tx) => {
-        const [user] = await tx
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.id, userId), eq(users.role, 'staff')))
-          .limit(1);
-        if (!user) return false;
-
-        const assignedOrders = await tx
-          .select({ id: orders.id })
-          .from(orders)
-          .where(eq(orders.assignedTo, userId));
-
-        if (assignedOrders.length > 0) {
-          await tx
-            .update(orders)
-            .set({ assignedTo: null, updatedAt: new Date() })
-            .where(eq(orders.assignedTo, userId));
-          await tx.insert(orderEvents).values(
-            assignedOrders.map(({ id }) => ({
-              orderId: id,
-              eventType: 'assignment_changed',
-              actor: 'staff' as const,
-              payloadJson: { from: userId, to: null, removedBy: removedByUserId },
-            })),
-          );
-        }
-
-        await tx.update(users).set({ role: 'customer' }).where(eq(users.id, userId));
-        return true;
-      });
     },
 
     async createOrder(params) {
@@ -401,8 +315,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     async listOrders(filter) {
       const conditions: SQL[] = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
-      if (filter.assignedTo !== undefined)
-        conditions.push(eq(orders.assignedTo, filter.assignedTo));
+      if (filter.assignedTo !== undefined) conditions.push(eq(orders.assignedTo, filter.assignedTo));
 
       if (filter.userId !== undefined) {
         return db
@@ -449,11 +362,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
     async registerUploadedFile(params) {
       const res = await db.transaction(async (tx) => {
-        const [order] = await tx
-          .select()
-          .from(orders)
-          .where(eq(orders.id, params.orderId))
-          .limit(1);
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
         if (!order) return null;
 
         await tx.insert(orderFiles).values({
@@ -478,10 +387,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         // First file advances the order to files_received from `submitted` or `files_pending`.
         let statusChanged = false;
         if (isValidStatusTransition(order.status, 'files_received')) {
-          await tx
-            .update(orders)
-            .set({ status: 'files_received' })
-            .where(eq(orders.id, params.orderId));
+          await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
@@ -520,9 +426,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const [credential] = await db
         .select()
         .from(orderUploadCredentials)
-        .where(
-          and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)),
-        )
+        .where(and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)))
         .limit(1);
 
       if (!credential || credential.expiresAt.getTime() < Date.now()) {
@@ -535,9 +439,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
       const updateResult = await db
         .update(orderUploadCredentials)
         .set({ usedAt: new Date() })
-        .where(
-          and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)),
-        )
+        .where(and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)))
         .returning({ id: orderUploadCredentials.id });
 
       if (updateResult.length === 0) {
@@ -549,11 +451,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
     async verifyUserCredentials(username, password) {
       const normalizedUsername = username.trim().toLowerCase();
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.username, normalizedUsername))
-        .limit(1);
+      const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
       if (!user || !user.passwordHash) return { valid: false };
 
       const passwordMatches = await bcrypt.compare(password, user.passwordHash);
@@ -563,7 +461,6 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async verifyOrCreateGoogleUser({ googleId, email }) {
-      const normalizedEmail = email.trim().toLowerCase();
       const [existingIdentity] = await db
         .select()
         .from(googleIdentities)
@@ -571,57 +468,12 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .limit(1);
 
       if (existingIdentity) {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, existingIdentity.userId))
-          .limit(1);
+        const [user] = await db.select().from(users).where(eq(users.id, existingIdentity.userId)).limit(1);
         if (!user) throw new Error('google_identities row references a missing user');
         return { valid: true, userId: user.id, username: user.username, role: user.role };
       }
 
-      const [emailIdentity] = await db
-        .select()
-        .from(googleIdentities)
-        .where(sql`lower(${googleIdentities.email}) = ${normalizedEmail}`)
-        .limit(1);
-
-      if (emailIdentity) {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, emailIdentity.userId))
-          .limit(1);
-        if (!user) throw new Error('google_identities row references a missing user');
-
-        await db
-          .update(googleIdentities)
-          .set({ googleId, email: normalizedEmail })
-          .where(eq(googleIdentities.id, emailIdentity.id));
-        return { valid: true, userId: user.id, username: user.username, role: user.role };
-      }
-
-      const [preRegisteredStaff] = await db
-        .select()
-        .from(users)
-        .where(and(sql`lower(${users.username}) = ${normalizedEmail}`, eq(users.role, 'staff')))
-        .limit(1);
-
-      if (preRegisteredStaff) {
-        await db.insert(googleIdentities).values({
-          userId: preRegisteredStaff.id,
-          googleId,
-          email: normalizedEmail,
-        });
-        return {
-          valid: true,
-          userId: preRegisteredStaff.id,
-          username: preRegisteredStaff.username,
-          role: 'staff' as const,
-        };
-      }
-
-      const derivedUsername = (normalizedEmail.split('@')[0] ?? 'user').toLowerCase();
+      const derivedUsername = (email.split('@')[0] ?? 'user').toLowerCase();
 
       return db.transaction(async (tx) => {
         const [insertResult] = await tx
@@ -630,16 +482,9 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           .returning({ id: users.id });
         const newUserId = insertResult!.id;
 
-        await tx
-          .insert(googleIdentities)
-          .values({ userId: newUserId, googleId, email: normalizedEmail });
+        await tx.insert(googleIdentities).values({ userId: newUserId, googleId, email });
 
-        return {
-          valid: true,
-          userId: newUserId,
-          username: derivedUsername,
-          role: 'customer' as const,
-        };
+        return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
       });
     },
 
@@ -653,11 +498,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
         .limit(1);
 
       if (existingIdentity) {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, existingIdentity.userId))
-          .limit(1);
+        const [user] = await db.select().from(users).where(eq(users.id, existingIdentity.userId)).limit(1);
         if (!user) throw new Error('google_identities row references a missing user');
         return { valid: true, userId: user.id, username: user.username, role: user.role };
       }
@@ -677,12 +518,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           email: normalizedEmail,
         });
 
-        return {
-          valid: true,
-          userId: newUserId,
-          username: derivedUsername,
-          role: 'customer' as const,
-        };
+        return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
       });
     },
 
@@ -696,11 +532,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
     async assignOrder(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx
-          .select()
-          .from(orders)
-          .where(eq(orders.id, params.orderId))
-          .limit(1);
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
         if (!order) return null;
 
         if (params.assignedTo !== null) {
@@ -729,22 +561,14 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           },
         });
 
-        const [updated] = await tx
-          .select()
-          .from(orders)
-          .where(eq(orders.id, params.orderId))
-          .limit(1);
+        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
         return updated ?? null;
       });
     },
 
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx
-          .select()
-          .from(orders)
-          .where(eq(orders.id, params.orderId))
-          .limit(1);
+        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
         if (!order) return null;
 
         if (!isValidStatusTransition(order.status, params.status)) {
@@ -780,11 +604,7 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           payloadJson: { from: order.status, to: params.status },
         });
 
-        const [updated] = await tx
-          .select()
-          .from(orders)
-          .where(eq(orders.id, params.orderId))
-          .limit(1);
+        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
         return updated ?? null;
       });
     },
