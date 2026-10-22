@@ -32,7 +32,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   if (signedIn) {
     const { userId, role } = await getAuthenticatedUser();
-    if (role === 'customer') {
+    if (role === 'customer' || role === 'staff') {
       const result = await callOrdersApi<Order[]>({
         method: 'GET',
         path: '/api/orders',
