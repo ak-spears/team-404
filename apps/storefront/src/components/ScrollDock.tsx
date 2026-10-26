@@ -19,6 +19,14 @@ interface Pair {
 
 const lerp = (from: number, to: number, t: number) => from + (to - from) * t;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+/** Smootherstep. Scroll position maps to docking progress on a curve rather than 1:1, so a
+ * small scroll near either end barely moves anything -- a linear mapping made the buttons lurch
+ * on the lightest flick, since they travel most of the viewport over one hero's worth of scroll.
+ * The scroll budget is fixed (docking has to finish by the bottom of the hero, and `distance` is
+ * already capped at the page's own max scroll), so a slower feel means holding the motion back
+ * early and late rather than stretching it out. Both endpoints and the scroll offset where
+ * docking completes are unchanged. */
+const ease = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
 const box = (r: DOMRect, scrollY = 0): Box => ({
   x: r.left,
@@ -61,7 +69,7 @@ export function ScrollDock() {
     const render = () => {
       frame = 0;
       const { scrollY } = window;
-      const progress = clamp01(scrollY / distance);
+      const progress = ease(clamp01(scrollY / distance));
 
       for (const { source, target, label, start, end } of pairs) {
         if (!target) {
