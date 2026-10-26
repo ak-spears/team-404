@@ -25,7 +25,7 @@ export default async function OrderPage({ searchParams }: PageProps) {
     <>
       <PageBand
         eyebrow="New order"
-        title="Place an order"
+        title="Place an Order"
         lead="Pick a service, attach your file, and we'll email you when it's ready for pickup."
       />
       {SHOW_PROMO_BANNER && (

@@ -116,7 +116,7 @@ export function OrderFileUpload({ orderId, initialFiles, initialLoadError, initi
 
   return (
     <div className="upload-instructions">
-      <h3>Your files</h3>
+      <h3>Your Files</h3>
 
       {list.kind === 'error' ? (
         <p className="error" role="alert">

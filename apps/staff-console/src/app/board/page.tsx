@@ -32,7 +32,7 @@ export default async function BoardPage() {
       <PageBand
         wide
         eyebrow="Staff workspace"
-        title="Order board"
+        title="Order Board"
         lead={<p>Drag a card to move it along. {orders.filter(isOpen).length} jobs in progress.</p>}
       />
       <div className="board-page">

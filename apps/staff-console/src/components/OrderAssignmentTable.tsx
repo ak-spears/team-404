@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { Order } from '@crimson-copies/shared';
+import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
+import { SERVICE_TITLES } from '../lib/labels';
 
 export interface StaffMember {
   id: number;
@@ -73,8 +74,12 @@ export function OrderAssignmentTable({
             {orders.map((order) => (
               <tr key={order.id}>
                 <td>#{order.id}</td>
-                <td>{order.serviceType}</td>
-                <td>{order.status}</td>
+                <td>{SERVICE_TITLES[order.serviceType]}</td>
+                <td>
+                  <span className="badge" data-status={order.status}>
+                    {ORDER_STATUS_LABELS[order.status]}
+                  </span>
+                </td>
                 <td>
                   <select
                     aria-label={`Assign order ${order.id}`}

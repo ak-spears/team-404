@@ -46,7 +46,7 @@ export default async function MyOrdersPage({ searchParams }: PageProps) {
     <>
       <PageBand
         eyebrow="Your print desk"
-        title="My orders"
+        title="My Orders"
         lead={loaded ? summarizeOrders(orders) : undefined}
         actions={
           <a href="/order" className="btn-primary">

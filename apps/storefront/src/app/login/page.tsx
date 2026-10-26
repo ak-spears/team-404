@@ -127,7 +127,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <h1>Sign in</h1>
+      <h1>Sign In</h1>
       {loginError && <p className="error">{loginError}</p>}
       <form action={login}>
         <input type="hidden" name="next" value={safeNextPath(next)} />
@@ -139,7 +139,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           Password
           <input type="password" name="password" required autoComplete="current-password" />
         </label>
-        <button type="submit">Sign in</button>
+        <button type="submit">Sign In</button>
         <a href={buildGoogleAuthUrl()} className="google-signin-btn">
           <GoogleIcon />Sign in with Google
         </a>

@@ -2,11 +2,11 @@ import type { Order, OrderStatus, PaymentMethod, ServiceType } from '@crimson-co
 
 /** Display names -- same wording the storefront shows customers. */
 export const SERVICE_TITLES: Record<ServiceType, string> = {
-  department_job: 'Department job',
+  department_job: 'Department Job',
   poster: 'Poster',
-  resume_portfolio: 'Resume & portfolio',
-  class_assignment: 'Class assignment',
-  personal_printing: 'Personal printing',
+  resume_portfolio: 'Resume & Portfolio',
+  class_assignment: 'Class Assignment',
+  personal_printing: 'Personal Printing',
 };
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {

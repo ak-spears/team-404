@@ -12,7 +12,7 @@ interface ServiceDetail {
 
 export const SERVICE_DETAILS: Record<ServiceType, ServiceDetail> = {
   department_job: {
-    title: 'Department jobs',
+    title: 'Department Jobs',
     blurb: 'Bulk and recurring work for campus departments. Staff price each job individually.',
     unit: 'per job',
     quantityLabel: 'Jobs',
@@ -26,21 +26,21 @@ export const SERVICE_DETAILS: Record<ServiceType, ServiceDetail> = {
     notesHint: 'Size (e.g. 24×36 in), matte or glossy, and when you need it.',
   },
   resume_portfolio: {
-    title: 'Resumes & portfolios',
+    title: 'Resumes & Portfolios',
     blurb: 'Resumes, cover letters, and portfolio pages.',
     unit: 'each',
     quantityLabel: 'Copies',
     notesHint: 'Paper weight, color or black & white, and whether to staple.',
   },
   class_assignment: {
-    title: 'Class assignments',
+    title: 'Class Assignments',
     blurb: 'Papers, readers, and handouts for your courses.',
     unit: 'per page',
     quantityLabel: 'Pages',
     notesHint: 'Single or double-sided, color or black & white, stapled or loose.',
   },
   personal_printing: {
-    title: 'Personal printing',
+    title: 'Personal Printing',
     blurb: 'Everyday documents, forms, and tickets.',
     unit: 'per page',
     quantityLabel: 'Pages',

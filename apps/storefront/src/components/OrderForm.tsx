@@ -151,7 +151,7 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
         <span className="order-placed-check" aria-hidden>
           &#10003;
         </span>
-        <h2>Order #{placedOrderId} placed</h2>
+        <h2>Order #{placedOrderId} Placed</h2>
         {uploadPercent !== null ? (
           <div className="upload-progress">
             <progress value={uploadPercent} max={100} />
@@ -168,7 +168,7 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
     <section className="order-builder">
       <form className="order-form" onSubmit={handleSubmit}>
         <div className="order-steps">
-          <FormStep step={1} title="What are we printing?">
+          <FormStep step={1} title="What Are We Printing?">
             <ChoiceGroup
               name="serviceType"
               choices={SERVICE_CHOICES}
@@ -256,7 +256,7 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
         </div>
 
         <aside className="order-summary">
-          <h2>Your order</h2>
+          <h2>Your Order</h2>
           <SummaryLine label="Service" value={service.title} />
           <SummaryLine
             label={service.quantityLabel}

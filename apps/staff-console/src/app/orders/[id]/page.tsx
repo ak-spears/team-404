@@ -69,7 +69,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
               <dt>Last update</dt>
               <dd>{dateTime.format(new Date(order.updatedAt))}</dd>
             </dl>
-            <h3>Spec notes</h3>
+            <h3>Spec Notes</h3>
             {order.specNotes ? (
               <p className="spec-notes">{order.specNotes}</p>
             ) : (
@@ -78,13 +78,13 @@ export default async function OrderDetailPage({ params }: PageProps) {
           </section>
 
           <section className="card">
-            <h2>Uploaded files</h2>
+            <h2>Uploaded Files</h2>
             <OrderFilesList orderId={order.id} />
           </section>
         </div>
 
         <section className="card detail-side">
-          <h2>Advance status</h2>
+          <h2>Advance Status</h2>
           <StatusUpdateForm orderId={order.id} currentStatus={order.status} />
         </section>
       </div>
