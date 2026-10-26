@@ -135,6 +135,9 @@ async function login(formData: FormData): Promise<void> {
 export default async function LoginPage({ searchParams }: PageProps) {
   const { error, next } = await searchParams;
   const loginError = getLoginErrorMessage(error);
+  // Plain <a>, not next/link: STOREFRONT_URL leaves this app's basePath, and Next would
+  // otherwise prefix it with /staff (see lib/base-path.ts). Same destination as logout.
+  const { STOREFRONT_URL } = loadConfig();
 
   return (
     <section className="auth-card">
@@ -163,6 +166,9 @@ export default async function LoginPage({ searchParams }: PageProps) {
           Sign in with Google
         </a>
       </form>
+      <a href={STOREFRONT_URL} className="btn auth-cancel">
+        Cancel
+      </a>
     </section>
   );
 }
