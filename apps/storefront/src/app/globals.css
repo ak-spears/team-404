@@ -2027,6 +2027,13 @@ dd {
 }
 
 .upload-instructions {
+  /* A block container left the bare <button>'s `align-self: flex-start` (see the global button
+     rule) inert, so "Upload" sat flush against the file picker -- no gap above it, 1em below.
+     A flex column activates that alignment and gives the card one consistent rhythm, the same
+     way `form` does for every other control in the app. */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   border-radius: var(--radius-md);
   padding: 1.5rem;
   background: var(--canvas);
@@ -2094,6 +2101,13 @@ dd {
   flex: 1;
   height: 0.5rem;
   accent-color: var(--crimson);
+}
+
+/* The gap above owns the spacing between these children, so they drop their own margins --
+   otherwise each one's margin stacks on top of it and the rhythm goes uneven again. Last,
+   so it outranks the equal-specificity child rules above. */
+.upload-instructions > * {
+  margin: 0;
 }
 
 .google-signin-btn {
