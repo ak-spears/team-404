@@ -66,7 +66,7 @@ export default async function QueuePage({ searchParams }: PageProps) {
     <>
       <PageBand
         eyebrow={mineActive ? 'Assigned to you' : 'Staff workspace'}
-        title="Order queue"
+        title="Order Queue"
         lead={
           <p>
             {openCount} open &middot; {countOf('ready_for_pickup')} ready for pickup &middot;{' '}
@@ -122,12 +122,12 @@ export default async function QueuePage({ searchParams }: PageProps) {
         empty={
           loadFailed ? (
             <>
-              <h2>Couldn&apos;t load orders</h2>
+              <h2>Couldn&apos;t Load Orders</h2>
               <p>The orders service didn&apos;t respond. Refresh to try again.</p>
             </>
           ) : (
             <>
-              <h2>Nothing here</h2>
+              <h2>Nothing Here</h2>
               <p>
                 {currentStatus
                   ? `No orders are ${ORDER_STATUS_LABELS[currentStatus].toLowerCase()} right now.`

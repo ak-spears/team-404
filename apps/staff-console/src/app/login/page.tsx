@@ -142,7 +142,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
   return (
     <section className="auth-card">
       <p className="auth-eyebrow">Staff workspace</p>
-      <h1>Sign in</h1>
+      <h1>Sign In</h1>
       <p className="muted">Use your staff account to see the order queue.</p>
       {loginError && <p className="error">{loginError}</p>}
       <form action={login}>

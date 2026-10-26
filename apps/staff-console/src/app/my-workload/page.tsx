@@ -25,7 +25,7 @@ export default async function MyWorkloadPage() {
     <>
       <PageBand
         eyebrow="Assigned to you"
-        title="My work"
+        title="My Work"
         lead={
           <p>
             {openCount} open {openCount === 1 ? 'job' : 'jobs'} &middot; oldest first
@@ -41,7 +41,7 @@ export default async function MyWorkloadPage() {
         orders={onlyMine}
         empty={
           <>
-            <h2>You don&apos;t have any tasks yet</h2>
+            <h2>You Don&apos;t Have Any Tasks Yet</h2>
             <p>Pick up an order from the main queue to get started.</p>
             <Link href="/" className="btn btn-primary">
               Go to staff queue

@@ -27,7 +27,7 @@ export default async function AdminAssignmentsPage() {
       <Link className="admin-back-link" href="/admin">
         ← Admin home
       </Link>
-      <h1>Order assignments</h1>
+      <h1>Order Assignments</h1>
       {staffResult.status !== 200 && <p className="error">Unable to load staff accounts.</p>}
       <OrderAssignmentTable
         initialOrders={orders}

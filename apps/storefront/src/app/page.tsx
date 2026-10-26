@@ -114,7 +114,7 @@ console.log('Signed in:', signedIn);
 
       <ServicesSection
         id="catalog"
-        title="Services & prices"
+        title="Services & Prices"
         lead={
           signedIn
             ? 'Upload your files with the order — no more emailing them back and forth.'

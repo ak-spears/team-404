@@ -11,7 +11,7 @@ export default async function AdminPage() {
     return (
       <section className="admin-confirmation">
         <p className="admin-eyebrow">Crimson Copies · Administration</p>
-        <h1>Are you an admin?</h1>
+        <h1>Are You an Admin?</h1>
         <form action={`${BASE_PATH}/api/admin/login`} method="post">
           <button type="submit">Yes, continue</button>
         </form>
@@ -27,7 +27,7 @@ export default async function AdminPage() {
     <>
       <header className="admin-masthead">
         <p className="admin-eyebrow">Crimson Copies · Administration</p>
-        <h1>Admin home</h1>
+        <h1>Admin Home</h1>
         <p>Choose an area to manage the print shop.</p>
       </header>
       <p className="admin-demo-note" role="note">
@@ -36,7 +36,7 @@ export default async function AdminPage() {
       <nav className="admin-dashboard" aria-label="Admin tools">
         <Link className="admin-dashboard-option" href="/admin/assignments">
           <span className="admin-option-number">01</span>
-          <span className="admin-option-title">Order assignments</span>
+          <span className="admin-option-title">Order Assignments</span>
           <span className="admin-option-description">
             Assign incoming orders to staff and review current workloads.
           </span>
@@ -46,7 +46,7 @@ export default async function AdminPage() {
         </Link>
         <Link className="admin-dashboard-option" href="/admin/analytics">
           <span className="admin-option-number">02</span>
-          <span className="admin-option-title">Shop insights</span>
+          <span className="admin-option-title">Shop Insights</span>
           <span className="admin-option-description">
             Review weekly order volume, recorded sales, and popular services.
           </span>
@@ -56,7 +56,7 @@ export default async function AdminPage() {
         </Link>
         <Link className="admin-dashboard-option" href="/admin/staff">
           <span className="admin-option-number">03</span>
-          <span className="admin-option-title">Staff access</span>
+          <span className="admin-option-title">Staff Access</span>
           <span className="admin-option-description">
             Register UA emails for access through Google sign-in.
           </span>

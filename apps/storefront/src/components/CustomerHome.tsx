@@ -22,7 +22,7 @@ export function CustomerHome({ name, orders }: CustomerHomeProps) {
       <section className="welcome welcome--photo" data-dock-until>
         <ScrollDock />
         <p className="welcome-eyebrow">Your print desk</p>
-        <h1>Welcome back, {name}</h1>
+        <h1>Welcome Back, {name}</h1>
         <p className="welcome-summary">{summarizeOrders(orders)}</p>
         <div className="welcome-actions">
           <a href="/order" className="btn-primary" data-dock="order">
@@ -36,7 +36,7 @@ export function CustomerHome({ name, orders }: CustomerHomeProps) {
 
       <section className="dash-section">
         <div className="section-head">
-          <h2>Recent orders</h2>
+          <h2>Recent Orders</h2>
           {orders.length > RECENT_LIMIT && (
             <a href="/orders" className="section-link">
               View all {orders.length} &rarr;
@@ -60,7 +60,7 @@ export function CustomerHome({ name, orders }: CustomerHomeProps) {
       </section>
 
       <ServicesSection
-        title="Order something new"
+        title="Order Something New"
         lead="Upload your files with the order — no more emailing them back and forth."
         signedIn
       />

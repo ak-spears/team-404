@@ -1,17 +1,10 @@
 import Link from 'next/link';
-import type { Order } from '@crimson-copies/shared';
+import type { Order, ServiceType } from '@crimson-copies/shared';
 import { callOrdersApi } from '../../../lib/internal-api';
 import { requireAdminSession } from '../../../lib/admin-session';
+import { SERVICE_TITLES } from '../../../lib/labels';
 
 export const dynamic = 'force-dynamic';
-
-const serviceLabels: Record<string, string> = {
-  poster: 'Poster printing',
-  resume_portfolio: 'Resume / portfolio',
-  class_assignment: 'Class assignment',
-  department_job: 'Department job',
-  personal_printing: 'Personal printing',
-};
 
 function startOfWeek(date: Date): Date {
   const week = new Date(date);
@@ -69,29 +62,29 @@ export default async function AdminAnalyticsPage() {
       <Link className="admin-back-link" href="/admin">
         ← Admin home
       </Link>
-      <h1>Shop insights</h1>
+      <h1>Shop Insights</h1>
       <p className="admin-analytics-note">
         Sales are estimated from recorded order prices and exclude cancelled orders. Quoted jobs
         without a price are not included in sales totals.
       </p>
       <section className="admin-metrics" aria-label="Shop overview">
         <article className="admin-metric">
-          <span>All-time orders</span>
+          <span>All-Time Orders</span>
           <strong>{orders.length}</strong>
         </article>
         <article className="admin-metric">
-          <span>Recorded sales</span>
+          <span>Recorded Sales</span>
           <strong>{currency(totalSales)}</strong>
         </article>
         <article className="admin-metric">
-          <span>Unassigned orders</span>
+          <span>Unassigned Orders</span>
           <strong>
             {orders.filter((order) => !order.assignedTo && order.status !== 'cancelled').length}
           </strong>
         </article>
       </section>
       <section className="admin-analytics-section">
-        <h2>Orders by week</h2>
+        <h2>Orders by Week</h2>
         <div
           className="weekly-chart"
           role="list"
@@ -121,7 +114,7 @@ export default async function AdminAnalyticsPage() {
         </div>
       </section>
       <section className="admin-analytics-section">
-        <h2>Most ordered services</h2>
+        <h2>Most Ordered Services</h2>
         {topServices.length === 0 ? (
           <p className="muted">No order data yet.</p>
         ) : (
@@ -131,14 +124,14 @@ export default async function AdminAnalyticsPage() {
                 <tr>
                   <th>Service</th>
                   <th>Orders</th>
-                  <th>Items / quantity</th>
-                  <th>Recorded sales</th>
+                  <th>Items / Quantity</th>
+                  <th>Recorded Sales</th>
                 </tr>
               </thead>
               <tbody>
                 {topServices.map(([type, stats]) => (
                   <tr key={type}>
-                    <td>{serviceLabels[type] ?? type}</td>
+                    <td>{SERVICE_TITLES[type as ServiceType] ?? type}</td>
                     <td>{stats.orders}</td>
                     <td>{stats.quantity}</td>
                     <td>{currency(stats.salesCents)}</td>

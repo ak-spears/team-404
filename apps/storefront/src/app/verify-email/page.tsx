@@ -42,7 +42,7 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
   return (
     <>
       <section className="intro" style={{ maxWidth: '42rem', margin: '3rem auto' }}>
-        <h1>Check your inbox</h1>
+        <h1>Check Your Inbox</h1>
         <p>
           We sent a verification email to <strong>{targetEmail}</strong>.
         </p>

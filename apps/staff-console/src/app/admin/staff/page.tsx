@@ -22,14 +22,14 @@ export default async function AdminStaffPage() {
       <Link className="admin-back-link" href="/admin">
         ← Admin home
       </Link>
-      <h1>Staff access</h1>
+      <h1>Staff Access</h1>
       <p className="admin-analytics-note">
         Register a UA email and initial password for staff console access. Passwords are stored as
         bcrypt hashes.
       </p>
       <StaffRegistrationForm />
       <section className="admin-analytics-section">
-        <h2>Registered staff</h2>
+        <h2>Registered Staff</h2>
         {result.status !== 200 && <p className="error">Unable to load staff accounts.</p>}
         <p className="muted">
           Removing access changes the account to customer and unassigns its orders. The user and

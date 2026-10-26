@@ -204,7 +204,8 @@ a:hover {
   text-decoration: none;
   font-weight: 600;
   font-size: 1.35rem;
-  padding: 0.65rem 1rem;
+  /* Same padding as the header's sign-in/staff/log-out buttons, so the row reads as one set. */
+  padding: 0.65rem 1.1rem;
   border-radius: var(--radius-sm);
   transition:
     background-color 0.15s ease,

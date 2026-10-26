@@ -73,7 +73,7 @@ export default async function CwidPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <h1>Enter your CWID</h1>
+      <h1>Enter Your CWID</h1>
       <p className="muted">
         Your Google account is not a UA email. Enter your Campus-Wide ID to finish signing in.
       </p>
