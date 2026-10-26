@@ -1262,6 +1262,24 @@ main .auth-card h1 {
   background: var(--canvas);
 }
 
+/* "Cancel" on the sign-in card. While signed out the header renders no nav links, so this is
+   the only way back to the storefront short of the browser's back button. Neutral styling,
+   matching the Google button, keeps it from competing with the two sign-in actions above it. */
+.auth-card .auth-cancel {
+  display: flex;
+  width: 100%;
+  margin-top: 1rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.auth-card .auth-cancel:hover {
+  color: var(--ink);
+  background: var(--canvas);
+}
+
 /* -------------------- Kanban board -------------------- */
 
 .board-page {
