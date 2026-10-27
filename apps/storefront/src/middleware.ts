@@ -11,6 +11,14 @@ import {
 // which Edge can't bundle.
 const SESSION_COOKIE_NAME = 'cc_session';
 
+/** APP_BASE_URL, else the proxy's forwarded host (same fallback as app/logout/route.ts). */
+function publicOrigin(request: NextRequest): string {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL;
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const proto = request.headers.get('x-forwarded-proto') ?? 'http';
+  return host ? `${proto}://${host}` : request.url;
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Let Next's static asset requests pass through untouched. Auth0 middleware is not meant to
   // evaluate bundle/chunk requests and can respond with 404s on /_next/static/* paths.
@@ -43,19 +51,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const hasAuthUser = Boolean(authSession?.user);
   const isUaEmailErrorPage = request.nextUrl.searchParams.get('error') === 'ua-email-required';
   if (!isUaEmailErrorPage && hasAuthUser && authSession && !isAllowedAuthEmail(getSessionEmail(authSession))) {
-    const errorUrl = new URL('/', request.url);
+    // Auth0 sends the browser to returnTo after logout, so it must be the public origin.
+    // request.url is the internal one (http://localhost:3000) behind Caddy on the VM.
+    const errorUrl = new URL('/?error=ua-email-required', publicOrigin(request));
     const logoutUrl = new URL('/auth/logout', request.url);
     logoutUrl.searchParams.set('returnTo', errorUrl.toString());
-
-    const response = NextResponse.redirect(logoutUrl.toString());
-    response.cookies.set('ua_email_error', 'ua-email-required', {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60,
-    });
-    return response;
+    return NextResponse.redirect(logoutUrl.toString());
   }
 
   const hasLegacySession = request.cookies.has(SESSION_COOKIE_NAME);
