@@ -2,6 +2,15 @@ import type { Order, OrderStatus } from '@crimson-copies/shared';
 
 const DONE: readonly OrderStatus[] = ['completed', 'cancelled'];
 
+/**
+ * What a customer calls an order: their own running count ("#4" for their 4th order), not the
+ * global id, which would make a 4th order read as "#25". Guest orders have no count and fall
+ * back to the id. URLs and upload credentials keep using the id.
+ */
+export function orderNumber(order: Pick<Order, 'id' | 'customerOrderNumber'>): number {
+  return order.customerOrderNumber ?? order.id;
+}
+
 /** Ready-for-pickup first (that's what a customer comes back for), then open, then done. */
 function rank(order: Order): number {
   if (order.status === 'ready_for_pickup') return 0;

@@ -140,6 +140,8 @@ export type UploadInstructions = z.infer<typeof uploadInstructionsSchema>;
 export const orderSchema = z.object({
   id: z.int(),
   customerId: z.int().nullable(),
+  /** Per-customer count (their 1st, 2nd... order); null for guest orders. Show this, not `id`, to customers. */
+  customerOrderNumber: z.int().nullable(),
   assignedTo: z.number().nullable(),
   serviceType: serviceTypeSchema,
   quantity: z.int(),

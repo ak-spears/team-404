@@ -43,7 +43,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   // the JSON, so browser JavaScript never holds it and a refresh doesn't lose it.
   const { password, ...uploadInstructions } = result.body.uploadInstructions;
   const response = NextResponse.json(
-    { orderId: result.body.orderId, uploadInstructions },
+    {
+      orderId: result.body.orderId,
+      customerOrderNumber: result.body.customerOrderNumber ?? null,
+      uploadInstructions,
+    },
     { status: 201 },
   );
   setUploadTokenCookie(response, result.body.orderId, password, uploadInstructions.expiresAt);
@@ -52,6 +56,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
 interface OrderCreateResult {
   orderId: number;
+  customerOrderNumber?: number | null;
   uploadInstructions: UploadInstructions;
 }
 

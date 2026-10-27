@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { UPLOAD_METHODS } from '@crimson-copies/shared';
@@ -59,6 +60,9 @@ export const orders = pgTable('orders', {
   id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
   assignedTo: bigint('assigned_to', { mode: 'number' }),
   customerId: bigint('customer_id', { mode: 'number' }).references(() => customers.id),
+  // 1, 2, 3... per signed-in customer, so their 4th order reads "#4" instead of the global id.
+  // Null for guest orders, which have no lasting customer to count against.
+  customerOrderNumber: integer('customer_order_number'),
   serviceType: serviceTypeEnum('service_type').notNull(),
   quantity: integer('quantity').notNull().default(1),
   specNotes: text('spec_notes'),
@@ -73,7 +77,9 @@ export const orders = pgTable('orders', {
     .defaultNow(),
   pickupReadyAt: timestamp('pickup_ready_at', { withTimezone: true, mode: 'date' }),
   completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
-});
+}, (table) => [
+  uniqueIndex('orders_customer_order_number_unique').on(table.customerId, table.customerOrderNumber),
+]);
 
 export const orderUploadCredentials = pgTable('order_upload_credentials', {
   id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
