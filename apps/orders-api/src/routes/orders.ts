@@ -24,6 +24,7 @@ function toOrderDto(record: OrderRecord): Order {
   return {
     id: record.id,
     customerId: record.customerId,
+    customerOrderNumber: record.customerOrderNumber ?? null,
     assignedTo: record.assignedTo,
     serviceType: record.serviceType,
     quantity: record.quantity,
@@ -257,7 +258,11 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
       },
     });
 
-    return reply.code(201).send({ orderId: order.id, uploadInstructions });
+    return reply.code(201).send({
+      orderId: order.id,
+      customerOrderNumber: order.customerOrderNumber ?? null,
+      uploadInstructions,
+    });
   });
 
   app.get('/api/staff', { preHandler: requireInternalKey }, async (request, reply) => {

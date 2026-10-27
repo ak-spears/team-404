@@ -18,6 +18,8 @@ const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface OrderRecord {
   id: number;
   customerId: number | null;
+  // Optional: only the Postgres schema has this column; the MySQL repo never sets it.
+  customerOrderNumber?: number | null;
   assignedTo: number | null;
   serviceType: ServiceType;
   quantity: number;

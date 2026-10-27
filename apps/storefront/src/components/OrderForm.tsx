@@ -11,6 +11,7 @@ import {
   type ServiceType,
 } from '@crimson-copies/shared';
 import { MAX_UPLOAD_BYTES, uploadErrorMessage, uploadOrderFile } from '../lib/order-files';
+import { orderNumber } from '../lib/orders';
 import { formatPrice, PAYMENT_LABELS, SERVICE_DETAILS } from '../lib/services';
 import { ChoiceGroup } from './ChoiceGroup';
 import { FileDrop } from './FileDrop';
@@ -20,6 +21,7 @@ import { QuantityStepper } from './QuantityStepper';
 /** The upload credential is not in this response -- the BFF keeps it in an HttpOnly cookie. */
 interface OrderCreateResponse {
   orderId: number;
+  customerOrderNumber?: number | null;
 }
 
 function isOrderCreateResponse(value: unknown): value is OrderCreateResponse {
@@ -66,7 +68,7 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [placedOrderId, setPlacedOrderId] = useState<number | null>(null);
+  const [placedOrderNumber, setPlacedOrderNumber] = useState<number | null>(null);
   // The file is chosen here but can only be uploaded once the order exists -- order_files rows
   // reference an order id -- so it is held until POST /api/orders returns one.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -118,7 +120,9 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
         setError('Unexpected response from the server.');
         return;
       }
-      setPlacedOrderId(body.orderId);
+      setPlacedOrderNumber(
+        orderNumber({ id: body.orderId, customerOrderNumber: body.customerOrderNumber ?? null }),
+      );
 
       // One action for the customer, two requests underneath. A failure here is reported as
       // "the order was placed, the file wasn't" -- never as a failed order, which would leave
@@ -145,13 +149,13 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
     }
   }
 
-  if (placedOrderId !== null) {
+  if (placedOrderNumber !== null) {
     return (
       <section className="order-placed" role="status">
         <span className="order-placed-check" aria-hidden>
           &#10003;
         </span>
-        <h2>Order #{placedOrderId} Placed</h2>
+        <h2>Order #{placedOrderNumber} Placed</h2>
         {uploadPercent !== null ? (
           <div className="upload-progress">
             <progress value={uploadPercent} max={100} />

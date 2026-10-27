@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, max, type SQL } from 'drizzle-orm';
 import {
   calculatePriceCents,
   isValidStatusTransition,
@@ -27,6 +27,7 @@ const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface OrderRecord {
   id: number;
   customerId: number | null;
+  customerOrderNumber: number | null;
   assignedTo: number | null;
   serviceType: ServiceType;
   quantity: number;
@@ -160,6 +161,7 @@ function generateUploadPassword(): string {
 const orderColumns = {
   id: orders.id,
   customerId: orders.customerId,
+  customerOrderNumber: orders.customerOrderNumber,
   assignedTo: orders.assignedTo,
   serviceType: orders.serviceType,
   quantity: orders.quantity,
@@ -254,10 +256,23 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
           customerId = inserted!.id;
         }
 
+        // Signed-in customers get their own running count. Locking their customers row
+        // serializes two orders placed at once, so both can't read the same max.
+        let customerOrderNumber: number | null = null;
+        if (params.userId) {
+          await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId)).for('update');
+          const [latest] = await tx
+            .select({ value: max(orders.customerOrderNumber) })
+            .from(orders)
+            .where(eq(orders.customerId, customerId));
+          customerOrderNumber = (latest?.value ?? 0) + 1;
+        }
+
         const [orderResult] = await tx
           .insert(orders)
           .values({
             customerId,
+            customerOrderNumber,
             serviceType: params.serviceType,
             quantity: params.quantity,
             specNotes: params.specNotes ?? null,

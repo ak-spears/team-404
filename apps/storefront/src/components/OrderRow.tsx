@@ -1,4 +1,5 @@
 import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
+import { orderNumber } from '../lib/orders';
 import { formatPrice, SERVICE_DETAILS } from '../lib/services';
 import { StepMeter } from './StepMeter';
 
@@ -8,7 +9,7 @@ export function OrderRow({ order }: { order: Order }) {
   const price = order.priceCents === null ? 'Quote pending' : formatPrice(order.priceCents);
   return (
     <a href={`/orders/${order.id}`} className="order-row" data-status={order.status}>
-      <span className="order-row-id">#{order.id}</span>
+      <span className="order-row-id">#{orderNumber(order)}</span>
       <span className="order-row-main">
         <strong>{SERVICE_DETAILS[order.serviceType].title}</strong>
         <span>

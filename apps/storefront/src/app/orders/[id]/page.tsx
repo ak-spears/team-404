@@ -6,6 +6,7 @@ import { getFileCaller, isPositiveIntegerId } from '../../../lib/file-access';
 import { callOrdersApi } from '../../../lib/internal-api';
 import { filesLoadErrorMessage, uploadErrorMessage } from '../../../lib/order-files';
 import { listOrderFiles } from '../../../lib/order-files-server';
+import { orderNumber } from '../../../lib/orders';
 
 // Order status and files change underneath this page (staff updates, uploads), so it is
 // rendered fresh on every request -- never served from a cache.
@@ -56,7 +57,7 @@ export default async function OrderStatusPage({ params, searchParams }: PageProp
   if (result.status === 403) {
     return (
       <>
-        <h1>Order #{id}</h1>
+        <h1>Order Not Available</h1>
         <p className="error">
           This order isn&apos;t associated with your account, or your account isn&apos;t linked
           yet. Contact staff if you believe this is an error.
@@ -71,7 +72,7 @@ export default async function OrderStatusPage({ params, searchParams }: PageProp
 
   return (
     <>
-      <h1>Order #{order.id}</h1>
+      <h1>Order #{orderNumber(order)}</h1>
       <OrderProgressTracker status={order.status} />
       <dl>
         <dt>Service</dt>
