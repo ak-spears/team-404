@@ -4,6 +4,7 @@ import { CustomerHome } from '../components/CustomerHome';
 import { PhotoCredit } from '../components/PhotoCredit';
 import { ScrollDock } from '../components/ScrollDock';
 import { ServicesSection } from '../components/ServicesSection';
+import { SignInErrorPopup } from '../components/SignInErrorPopup';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { auth0 } from '../lib/auth0';
 import { loadConfig } from '../lib/config';
@@ -82,6 +83,12 @@ console.log('Signed in:', signedIn);
       <section className="hero" data-dock-until>
         <ScrollDock />
         {homeError && <p className="error hero-error">{homeError}</p>}
+        {error === 'ua-email-required' && (
+          <SignInErrorPopup
+            message="Please sign in with your UA email address (@crimson.ua.edu or @ua.edu)."
+            redirectTo="/auth/login"
+          />
+        )}
         <h1 className="hero-title" data-dock="brand">
           Crimson Copies
         </h1>
