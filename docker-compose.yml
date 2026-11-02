@@ -5,6 +5,41 @@ name: crimson-copies
 # against this infra.
 
 services:
+  orders-api:
+    profiles: [apps]
+    build: { context: ., dockerfile: apps/orders-api/Dockerfile }
+    depends_on: { mysql: { condition: service_healthy } }
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "4000"
+      DATABASE_URL: mysql://crimson_copies:devpassword@mysql:3306/crimson_copies
+      INTERNAL_API_KEY: dev-internal-key-change-me
+      NOTIFY_URL: http://notify:4100
+      # team-404: orders-api also talks to MinIO, so it needs the MinIO settings too.
+      # Copy the MINIO_* variable names from apps/orders-api/src/lib/storage.ts and src/config.ts.
+    ports: ["4000:4000"]
+  notify:
+    profiles: [apps]
+    build: { context: ., dockerfile: services/notify/Dockerfile }
+    environment: { HOST: "0.0.0.0", PORT: "4100", INTERNAL_API_KEY: dev-internal-key-change-me }
+  storefront:
+    profiles: [apps]
+    build: { context: ., dockerfile: apps/storefront/Dockerfile }
+    environment:
+      PORT: "3000"
+      ORDERS_API_URL: http://orders-api:4000
+      INTERNAL_API_KEY: dev-internal-key-change-me
+      SESSION_SECRET: dev-storefront-session-secret
+    ports: ["3000:3000"]
+  staff-console:
+    profiles: [apps]
+    build: { context: ., dockerfile: apps/staff-console/Dockerfile }
+    environment:
+      PORT: "3001"
+      ORDERS_API_URL: http://orders-api:4000
+      INTERNAL_API_KEY: dev-internal-key-change-me
+      SESSION_SECRET: dev-staff-session-secret
+    ports: ["3001:3001"]
   mysql:
     image: mysql:8.4
     restart: unless-stopped

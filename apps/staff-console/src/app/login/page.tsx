@@ -162,6 +162,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <GoogleIcon />
           Sign in with Google
         </a>
+        
+
+<a
+  href="/staff/auth/login"
+  className="google-signin-btn"
+>
+  Sign in with Auth0
+</a>
+
       </form>
     </section>
   );
