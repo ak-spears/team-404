@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { orderAssignmentInputSchema } from '@crimson-copies/shared';
 import { callOrdersApi } from '../../../../../lib/internal-api';
-import { getStaffSession, hasAdminSession } from '../../../../../lib/session';
+import { getStaffSession } from '../../../../../lib/session';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -11,9 +11,6 @@ export async function PATCH(request: Request, { params }: RouteParams): Promise<
   const session = await getStaffSession();
   if (!session) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-  if (!(await hasAdminSession())) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   const json = await request.json().catch(() => undefined);
