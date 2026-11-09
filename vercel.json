@@ -1,0 +1,44 @@
+cd ~/team-404-vercel
+cat > vercel.json <<'EOF'
+{
+  "services": {
+    "storefront": {
+      "root": "apps/storefront/",
+      "framework": "nextjs",
+      "buildCommand": "pnpm --filter @crimson-copies/shared build && next build",
+      "bindings": [
+        { "type": "service", "service": "orders_api", "format": "url", "env": "ORDERS_API_URL" }
+      ]
+    },
+    "staff_console": {
+      "root": "apps/staff-console/",
+      "framework": "nextjs",
+      "buildCommand": "pnpm --filter @crimson-copies/shared build && next build",
+      "bindings": [
+        { "type": "service", "service": "orders_api", "format": "url", "env": "ORDERS_API_URL" }
+      ]
+    },
+    "orders_api": {
+      "root": "apps/orders-api/",
+      "framework": "fastify",
+      "entrypoint": "src/server.ts",
+      "buildCommand": "pnpm --filter @crimson-copies/shared build",
+      "bindings": [
+        { "type": "service", "service": "notify", "format": "url", "env": "NOTIFY_URL" }
+      ]
+    },
+    "notify": {
+      "root": "services/notify/",
+      "framework": "fastify",
+      "entrypoint": "src/server.ts",
+      "buildCommand": "pnpm --filter @crimson-copies/shared build"
+    }
+  },
+  "rewrites": [
+    { "source": "/staff", "destination": { "service": "staff_console" } },
+    { "source": "/staff/(.*)", "destination": { "service": "staff_console" } },
+    { "source": "/(.*)", "destination": { "service": "storefront" } }
+  ]
+}
+EOF
+ls vercel.json
