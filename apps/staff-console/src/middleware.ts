@@ -29,10 +29,6 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  // Excludes /api/* -- those are called by client-side fetch() (StatusUpdateForm,
-  // OrderFilesList), which silently follows a redirect and would treat the resulting 200 login
-  // page as success. API routes handle their own 401 via getStaffSession() instead.
-  // Excludes /auth/* -- the Google OAuth callback runs before any session cookie exists, so it
-  // would otherwise get redirected straight back to /login before it ever executes.
-  matcher: ['/((?!login|logout|auth|api|_next|favicon.ico).*)'],
+  runtime: 'nodejs',
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)'],
 };
