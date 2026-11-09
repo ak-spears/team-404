@@ -1,5 +1,4 @@
-cd ~/team-404-vercel
-cat > vercel.json <<'EOF'
+
 {
   "services": {
     "storefront": {
