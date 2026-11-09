@@ -39,5 +39,4 @@
     { "source": "/(.*)", "destination": { "service": "storefront" } }
   ]
 }
-EOF
-ls vercel.json
+
