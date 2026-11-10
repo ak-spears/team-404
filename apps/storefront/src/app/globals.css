@@ -1326,6 +1326,75 @@ body:has(.welcome) .site-header::before {
   margin-top: 0;
 }
 
+/* ---- My orders: search box above the filter tabs ---- */
+
+/* The global `form` rule below stacks fields in a column; this one is a toolbar, so it
+   sets direction and alignment explicitly rather than inheriting them. */
+.order-search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+/* Takes the row; the button and Clear link keep their natural width. */
+.order-search input[type='search'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+/* Safari puts its own clear affordance here and it clashes with the Clear link. */
+.order-search input[type='search']::-webkit-search-decoration,
+.order-search input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.order-search button {
+  flex: 0 0 auto;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.order-search-clear {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.order-search-clear:hover {
+  color: var(--crimson);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Announced to screen readers via role="status" when a search changes the list. */
+.order-result-count {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 480px) {
+  /* The button drops under the field rather than squeezing it to nothing. */
+  .order-search {
+    flex-wrap: wrap;
+  }
+
+  .order-search input[type='search'] {
+    flex-basis: 100%;
+  }
+}
+
 .order-tabs {
   display: flex;
   gap: 0.25rem;
