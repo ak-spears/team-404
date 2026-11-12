@@ -43,6 +43,12 @@ export const auth0EmailVerifyInputSchema = z.object({
 });
 export type Auth0EmailVerifyInput = z.infer<typeof auth0EmailVerifyInputSchema>;
 
+/** Body of `POST /internal/auth/verify-auth0-staff` (staff-console BFF -> orders-api). */
+export const auth0StaffVerifyInputSchema = z.object({
+  email: z.email(),
+});
+export type Auth0StaffVerifyInput = z.infer<typeof auth0StaffVerifyInputSchema>;
+
 /** True when the email is a UA address that skips the CWID gate. */
 export function isUaEmail(email: string): boolean {
   const normalized = email.trim().toLowerCase();

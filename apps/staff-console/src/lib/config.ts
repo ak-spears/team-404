@@ -22,6 +22,10 @@ const envSchema = z.object({
   // storefront, so a leaked secret for one app can't forge sessions for the other.
   SESSION_SECRET: z.string().min(1, 'SESSION_SECRET is required'),
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  AUTH0_DOMAIN: z.string().min(1, 'AUTH0_DOMAIN is required'),
+  AUTH0_CLIENT_ID: z.string().min(1, 'AUTH0_CLIENT_ID is required'),
+  AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required'),
+  AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required'),
   // Bare origin (no /staff) -- BASE_PATH is added by hand when building the OAuth redirect URI,
   // same as everywhere else in this app that has to prefix a URL manually (see lib/base-path.ts).
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL is required'),

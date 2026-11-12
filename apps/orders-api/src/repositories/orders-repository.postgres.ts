@@ -140,6 +140,9 @@ export interface OrdersRepository {
   verifyOrCreateAuth0User(input: {
     email: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
+  verifyAuth0StaffUser(input: {
+    email: string;
+  }): Promise<{ valid: true; userId: number; username: string; role: 'staff' } | { valid: false }>;
   setUserCwid(
     userId: number,
     cwid: string,
@@ -535,6 +538,20 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
 
         return { valid: true, userId: newUserId, username: derivedUsername, role: 'customer' as const };
       });
+    },
+
+    async verifyAuth0StaffUser({ email }) {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.username, normalizedEmail), eq(users.role, 'staff')))
+        .limit(1);
+
+      if (!user) return { valid: false };
+
+      return { valid: true, userId: user.id, username: user.username, role: 'staff' as const };
     },
 
     async setUserCwid(userId, cwid) {
