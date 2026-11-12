@@ -14,7 +14,22 @@ const SESSION_COOKIE_NAME = 'cc_session';
  * expired, or non-staff cookie still gets redirected to the real page here, then rejected
  * there -- this is a convenience, not the trust boundary.
  */
+
+
+const PUBLIC_PATHS = [
+  '/login',        // the login page itself
+  '/auth',         // /auth/google/callback and /auth/cwid (sign-in flow)
+  '/api/admin/login', // admin login POST
+  '/logout',       // so signing out never bounces to login first
+];
+
 export function middleware(request: NextRequest): NextResponse {
+  const { pathname } = request.nextUrl;
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+
+
   if (!request.cookies.has(SESSION_COOKIE_NAME)) {
     // Spell the /staff basePath out: NextResponse.redirect() does NOT re-add it the way
     // next/navigation's redirect() does. Use the configured public origin because request.url
