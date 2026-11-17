@@ -727,28 +727,35 @@ body:has(.hero) main {
 
   .site-header {
     flex-wrap: nowrap;
-    gap: 0.5rem;
-    padding: 1.1rem 1rem;
+    gap: 0.4rem;
+    padding: 1rem 0.75rem;
   }
 
   .site-header .brand {
-    font-size: 1.55rem;
+    font-size: 1.3rem;
     white-space: nowrap;
   }
 
   .site-header nav {
     flex-wrap: nowrap;
-    gap: 0.5rem;
+    gap: 0;
   }
 
   .site-header nav a {
-    padding: 0.5rem 0.6rem;
-    font-size: 1rem;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.92rem;
     white-space: nowrap;
   }
 
   .account .account-trigger {
+    gap: 0;
+    padding: 0 0.2rem;
     font-size: 1rem;
+  }
+
+  /* The avatar alone reads as the menu button; the chevron costs room the row doesn't have. */
+  .account-trigger svg {
+    display: none;
   }
 
   .account-avatar {
@@ -763,13 +770,13 @@ body:has(.hero) main {
   .header-actions,
   .session-form {
     flex-wrap: nowrap;
-    gap: 0.4rem;
+    gap: 0.3rem;
   }
 
   .session-form a,
   .session-form button {
-    padding: 0.5rem 0.7rem;
-    font-size: 0.95rem;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.88rem;
     white-space: nowrap;
   }
 }
@@ -1231,11 +1238,14 @@ body:has(.welcome) .site-header::before {
   background: var(--crimson);
 }
 
-/* Narrow: id + title on top, meter and badge on a second line. */
+/* Narrow: id + title on top, meter and badge on a second line. The meter spans under the id
+   so its width can't widen the id column and squeeze the title. */
 @media (max-width: 640px) {
   .order-row {
-    grid-template-columns: auto 1fr;
-    grid-template-areas: 'id main' 'meter badge';
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'id main main' 'meter meter badge';
+    gap: 0.5rem 1rem;
+    padding: 0.9rem 1rem;
   }
 
   .order-row-id {
@@ -2250,4 +2260,64 @@ dd {
   color: var(--muted);
   border: 1px solid var(--border-strong);
   font-weight: 600;
+}
+
+/* -------------------- Phones --------------------
+   Phone-only spacing. Everything here sits behind this breakpoint, so desktop and tablet
+   layouts are untouched. */
+
+@media (max-width: 640px) {
+  main {
+    padding-inline: 1rem;
+  }
+
+  /* Bands keep their text on main's narrower phone column. */
+  .welcome {
+    padding-inline: 1rem;
+  }
+
+  main > form,
+  main > div,
+  dl {
+    padding: 1.1rem;
+  }
+
+  .upload-instructions {
+    padding: 1.1rem;
+  }
+
+  th,
+  td {
+    padding: 0.7rem 0.75rem;
+  }
+
+  /* The native file input has a fixed intrinsic width wider than a phone card. */
+  .file-picker input[type='file'] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .order-placed {
+    padding: 2rem 1.25rem;
+  }
+
+  /* The one-line credit is wider than a phone; let the caption truncate along with the link
+     instead of widening the page. */
+  .photo-credit span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Narrowest phones (360px Android): the signed-out header row needs a little more room. */
+@media (max-width: 380px) {
+  .site-header .brand {
+    font-size: 1.18rem;
+  }
+
+  .session-form a,
+  .session-form button {
+    padding-inline: 0.45rem;
+  }
 }

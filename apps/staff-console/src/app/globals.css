@@ -1817,3 +1817,62 @@ main .kanban-column h2 {
     transition: none;
   }
 }
+
+/* -------------------- Phones --------------------
+   Phone-only fixes. Everything here sits behind this breakpoint, so desktop and tablet
+   layouts are untouched. */
+
+@media (max-width: 640px) {
+  /* Queue rows: id and status on top, title below, then meter and assignee. A long staff
+     username no longer pushes the badge off the card. */
+  .order-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'id badge' 'main main' 'meter assignee';
+    gap: 0.45rem 1rem;
+  }
+
+  .order-row-assignee {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Board: drag and drop doesn't work on touch, so cards move with their "Move to..." select.
+     Swiping between lanes settles on one column at a time. */
+  .kanban {
+    scroll-snap-type: x proximity;
+  }
+
+  .kanban-column {
+    scroll-snap-align: start;
+  }
+
+  .kanban-card-head select {
+    max-width: 60%;
+  }
+
+  th,
+  td {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .card,
+  main > form,
+  main > dl {
+    padding: 1.1rem;
+  }
+
+  .auth-card {
+    padding: 1.5rem 1.25rem;
+  }
+
+  main > .auth-card:first-child {
+    margin-top: 1.5rem;
+  }
+
+  .admin-masthead,
+  .admin-confirmation {
+    padding: 1.1rem;
+  }
+}
