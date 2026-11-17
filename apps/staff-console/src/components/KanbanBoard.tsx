@@ -25,6 +25,7 @@ export function KanbanBoard({
   basePath: string;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [savingOrderIds, setSavingOrderIds] = useState<number[]>([]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [staffFilter, setStaffFilter] = useState<string>('all');
@@ -47,8 +48,8 @@ export function KanbanBoard({
     }
 
     setError(null);
-    const previous = orders;
-    setOrders(orders.map((o) => (o.id === orderId ? { ...o, status: to } : o)));
+    const previousStatus = order.status;
+    setOrders((current) => current.map((o) => (o.id === orderId ? { ...o, status: to } : o)));
 
     try {
       // Plain fetch() is NOT basePath-aware in Next, so prefix explicitly.
@@ -59,8 +60,38 @@ export function KanbanBoard({
       });
       if (!res.ok) throw new Error('update failed');
     } catch {
-      setOrders(previous);
+      // Only this order's status: an assignment saved in the meantime has to survive the rollback.
+      setOrders((current) =>
+        current.map((o) => (o.id === orderId ? { ...o, status: previousStatus } : o)),
+      );
       setError(`Couldn't update order #${orderId}. Please try again.`);
+    }
+  }
+
+  async function assignOrder(orderId: number, value: string): Promise<void> {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
+
+    const assignedTo = value === '' ? null : Number(value);
+    const previousAssignedTo = order.assignedTo;
+    setError(null);
+    setOrders((current) => current.map((o) => (o.id === orderId ? { ...o, assignedTo } : o)));
+    setSavingOrderIds((current) => [...current, orderId]);
+
+    try {
+      const res = await fetch(`${basePath}/api/orders/${orderId}/assignment`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTo }),
+      });
+      if (!res.ok) throw new Error('assignment failed');
+    } catch {
+      setOrders((current) =>
+        current.map((o) => (o.id === orderId ? { ...o, assignedTo: previousAssignedTo } : o)),
+      );
+      setError(`Couldn't update the assignment for order #${orderId}. Please try again.`);
+    } finally {
+      setSavingOrderIds((current) => current.filter((id) => id !== orderId));
     }
   }
 
@@ -119,10 +150,6 @@ export function KanbanBoard({
                   isValidStatusTransition(order.status, s),
                 );
 
-                const assigneeName = staffMembers.find(
-                  (staff) => staff.id === order.assignedTo,
-                )?.username;
-
                 return (
                   <article
                     key={order.id}
@@ -133,12 +160,19 @@ export function KanbanBoard({
                   >
                     <div className="kanban-card-head">
                       <Link href={`/orders/${order.id}`}>#{order.id}</Link>
-                      <span
-                        className="order-row-assignee"
-                        data-unassigned={assigneeName ? undefined : ''}
+                      <select
+                        aria-label={`Assign order ${order.id}`}
+                        value={String(order.assignedTo ?? '')}
+                        disabled={savingOrderIds.includes(order.id) || staffMembers.length === 0}
+                        onChange={(e) => void assignOrder(order.id, e.target.value)}
                       >
-                        {assigneeName ?? 'Unassigned'}
-                      </span>
+                        <option value="">Unassigned</option>
+                        {staffMembers.map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            {staff.username}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <strong className="kanban-card-title">
                       {SERVICE_TITLES[order.serviceType]}

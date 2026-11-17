@@ -1456,13 +1456,6 @@ main .kanban-column h2 {
   text-decoration: none;
 }
 
-.kanban-card-head .order-row-assignee {
-  overflow: hidden;
-  max-width: 9rem;
-  font-size: 0.7rem;
-  text-overflow: ellipsis;
-}
-
 .kanban-card-title {
   font-family: var(--font-heading);
   font-size: 1.05rem;
@@ -1474,6 +1467,14 @@ main .kanban-column h2 {
   margin-top: 0.4rem;
   padding: 0.3rem 0.5rem;
   font-size: 0.8rem;
+}
+
+.kanban-card-head select {
+  width: auto;
+  min-width: 0;
+  max-width: 9rem;
+  margin-top: 0;
+  text-overflow: ellipsis;
 }
 
 /* -------------------- Admin workspace -------------------- */
