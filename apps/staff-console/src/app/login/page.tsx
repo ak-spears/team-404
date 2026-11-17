@@ -1,4 +1,3 @@
-
 import { isAllowedLoginUsername } from "@crimson-copies/shared";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -27,9 +26,13 @@ function buildGoogleAuthUrl(): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+function buildAuth0AuthUrl(): string {
+  return `${BASE_PATH}/auth/auth0/start`;
+}
+
 function getLoginErrorMessage(error?: string): string | null {
   if (error === "not-staff") {
-    return "This Google account isn't a staff account.";
+    return "This account isn't a staff account.";
   }
   if (error) {
     return "Invalid username or password.";
@@ -164,6 +167,9 @@ export default async function LoginPage({ searchParams }: PageProps) {
         <a href={buildGoogleAuthUrl()} className="google-signin-btn">
           <GoogleIcon />
           Sign in with Google
+        </a>
+        <a href={buildAuth0AuthUrl()} className="btn btn-secondary">
+          Sign in with Auth0
         </a>
       </form>
       <a href={STOREFRONT_URL} className="btn auth-cancel">

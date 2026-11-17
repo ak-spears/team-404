@@ -103,6 +103,9 @@ importers:
 
   apps/staff-console:
     dependencies:
+      '@auth0/nextjs-auth0':
+        specifier: ^4.30.0
+        version: 4.30.0(next@15.5.23(@opentelemetry/api@1.9.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@crimson-copies/shared':
         specifier: workspace:*
         version: link:../../packages/shared

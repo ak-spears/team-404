@@ -160,6 +160,11 @@ export interface OrdersRepository {
     email: string;
   }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
 
+  /** Strict staff-only Auth0 check: the email must map to an existing staff-role user. */
+  verifyAuth0StaffUser(input: {
+    email: string;
+  }): Promise<{ valid: true; userId: number; username: string; role: 'staff' } | { valid: false }>;
+
   /** Stores a CWID on the user. Always overwrites (non-UA Google logins re-collect every time). */
   setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
 
@@ -627,6 +632,45 @@ if (filter.assignedTo !== undefined) {
         };
       });
     },
+
+    async verifyAuth0StaffUser({ email }) {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Reuses google_identities as a general "linked email" table -- looks up by email
+      // instead of googleId, so an Auth0 sign-in with the same email as an existing
+      // Google-linked account resolves to the same user.
+      const [existingIdentity] = await db
+        .select()
+        .from(googleIdentities)
+        .where(eq(googleIdentities.email, normalizedEmail))
+        .limit(1);
+
+      if (existingIdentity) {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, existingIdentity.userId))
+          .limit(1);
+
+        if (!user) {
+          throw new Error('google_identities row references a missing user');
+        }
+
+        if (user.role !== 'staff') {
+          return { valid: false };
+        }
+
+        return {
+          valid: true,
+          userId: user.id,
+          username: user.username,
+          role: user.role,
+        };
+      }
+
+      return { valid: false };
+    },
+
     /*async verifyOrCreateGoogleUser({ googleId, email }) {
       // Check if this Google account is already linked to a user.
       const [existingIdentity] = await db
