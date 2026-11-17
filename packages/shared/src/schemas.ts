@@ -162,6 +162,23 @@ export const orderSchema = z.object({
 });
 export type Order = z.infer<typeof orderSchema>;
 
+/**
+ * What `GET /api/orders/:id` returns: an order plus who placed it.
+ *
+ * Only the single-order route carries these. `GET /api/orders` lists from a query with no
+ * customer join, so this is a separate type rather than two optional fields on `Order` --
+ * a list caller cannot then read a `customerName` that was never going to be populated.
+ *
+ * Both fields are nullable: the join is a LEFT JOIN, and an order whose customer row has
+ * been removed still has to come back rather than 404.
+ */
+export const orderWithCustomerSchema = orderSchema.extend({
+  customerName: z.string().nullable(),
+  customerEmail: z.string().nullable(),
+});
+/** Named ...Dto because orders-api's repository already has an `OrderWithCustomer` row type. */
+export type OrderWithCustomerDto = z.infer<typeof orderWithCustomerSchema>;
+
 /** Data payload shapes `orders-api` sends to `services/notify`'s `POST /internal/send`. */
 export const emailTemplateDataSchemas = {
   'order-confirmation': z.object({

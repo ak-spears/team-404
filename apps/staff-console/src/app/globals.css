@@ -888,6 +888,62 @@ dd {
   font-size: 0.8rem;
 }
 
+/* Per-file print action. A button, not a link -- it prints in place rather than navigating. */
+.files-list .file-print {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--crimson);
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.files-list .file-print:hover {
+  color: var(--on-crimson);
+  background: var(--crimson);
+  border-color: var(--crimson);
+}
+
+/* A print failure reported next to the file it belongs to. */
+.files-list .file-print-error {
+  flex-basis: 100%;
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+}
+
+/**
+ * A print failure reported from the page band, where the Print file button lives. The band
+ * is crimson, so the usual .error colours would be unreadable on it.
+ */
+.page-band-actions .band-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--on-crimson);
+}
+
+/**
+ * The frame lib/print-file.ts loads an uploaded file into before printing it.
+ *
+ * Deliberately NOT display:none or visibility:hidden -- a frame that is not laid out can
+ * print blank. It is given real dimensions and moved off the canvas instead.
+ */
+.print-frame {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* -------------------- Queue -------------------- */
 
 .order-tabs {
@@ -1936,7 +1992,10 @@ main .kanban-column h2 {
   .detail-side,
   .step-meter,
   .theme-toggle,
-  .account {
+  .account,
+  .files-list .file-print,
+  /* A file left over from a "Print file" must never ride along on a printed receipt. */
+  .print-frame {
     display: none !important;
   }
 
@@ -2025,9 +2084,5 @@ main .kanban-column h2 {
   .files-list a {
     color: #000;
     text-decoration: none;
-  }
-
-  a[href]::after {
-    content: '';
   }
 }

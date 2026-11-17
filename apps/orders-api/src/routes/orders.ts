@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
+  BROWSER_PRINTABLE_EXTENSIONS,
   orderAssignmentInputSchema,
   orderCreateInputSchema,
   orderListQuerySchema,
   orderStatusUpdateInputSchema,
   type Order,
   type OrderListQuery,
+  type OrderWithCustomerDto,
 } from '@crimson-copies/shared';
 import type { Config } from '../config.js';
 import { doNotifyThing } from '../lib/notify-and-record.js';
@@ -36,6 +38,23 @@ function toOrderDto(record: OrderRecord): Order {
     updatedAt: record.updatedAt.toISOString(),
     pickupReadyAt: record.pickupReadyAt ? record.pickupReadyAt.toISOString() : null,
     completedAt: record.completedAt ? record.completedAt.toISOString() : null,
+  };
+}
+
+/**
+ * The single-order DTO: everything `toOrderDto` returns plus who placed the order.
+ *
+ * `GET /api/orders/:id` already loads the customer join (it needs `userId` for the ownership
+ * check), so this costs no extra query -- the name and email were simply being dropped on the
+ * floor. Staff need them to match a printed job ticket to the person at the pickup counter;
+ * the only other caller allowed through is the customer who placed the order, reading back
+ * their own details.
+ */
+function toOrderWithCustomerDto(record: OrderWithCustomer): OrderWithCustomerDto {
+  return {
+    ...toOrderDto(record),
+    customerName: record.customerName,
+    customerEmail: record.customerEmail,
   };
 }
 
@@ -112,8 +131,11 @@ const NEVER_INLINE_EXTENSIONS = new Set(['svg', 'htm', 'html', 'xhtml', 'xml']);
  * Neither a PDF in the browser's viewer nor a raster image can run script on this origin, and
  * the server-chosen Content-Type plus `nosniff` stops either being re-read as HTML. Everything
  * else keeps the sandbox; svg/html/xml are additionally forced to download (see above).
+ *
+ * Shared with staff-console, which offers "Print" on exactly these -- the same list decides
+ * what is sandboxed here and what the console claims it can print.
  */
-const UNSANDBOXED_INLINE_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff']);
+const UNSANDBOXED_INLINE_EXTENSIONS = new Set<string>(BROWSER_PRINTABLE_EXTENSIONS);
 
 /** `inline` so PDFs and images open in a tab for printing; the name is re-sanitized on the way out. */
 function contentDisposition(originalFilename: string): string {
@@ -390,7 +412,7 @@ export function registerOrdersRoutes(app: FastifyInstance, options: OrdersRoutes
         return reply.code(403).send({ error: 'forbidden' });
       }
 
-      return reply.code(200).send(toOrderDto(order));
+      return reply.code(200).send(toOrderWithCustomerDto(order));
     },
   );
 

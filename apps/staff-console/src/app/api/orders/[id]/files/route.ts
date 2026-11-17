@@ -1,32 +1,15 @@
 import { NextResponse } from 'next/server';
-import { BASE_PATH } from '../../../../../lib/base-path';
-import { callOrdersApi } from '../../../../../lib/internal-api';
+import { loadOrderFiles } from '../../../../../lib/order-files';
 import { getStaffSession } from '../../../../../lib/session';
-
-interface OrderFileRecord {
-  id: number;
-  originalFilename: string;
-  sizeBytes: number;
-  uploadedAt: string;
-}
-
-interface OrderFileLink {
-  id: number;
-  originalFilename: string;
-  sizeBytes: number;
-  uploadedAt: string;
-  url: string;
-}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 /**
- * BFF for the staff-console file list -- calls orders-api's `GET /api/orders/:id/files` and
- * links each file to this app's own download route (./[fileId]/route.ts). MinIO listens on
- * 127.0.0.1 only, so a presigned MinIO link would be unreachable from a staff browser.
- * Independently re-checks the session (see the status route's comment for why).
+ * BFF for the staff-console file list. The fetch-and-link work lives in lib/order-files.ts so
+ * the order page can do the same thing server-side; this route is what the client list
+ * refreshes from. Independently re-checks the session (see the status route's comment for why).
  */
 export async function GET(_request: Request, { params }: RouteParams): Promise<NextResponse> {
   console.log('GET /api/orders/:id/files: request received');
@@ -41,29 +24,19 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<N
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const result = await callOrdersApi<OrderFileRecord[]>({
-    method: 'GET',
-    path: `/api/orders/${id}/files`,
-    role: session.role,
-    userId: String(session.userId),
-  });
+  const result = await loadOrderFiles(id, { role: session.role, userId: session.userId });
 
-  if (result.status !== 200 || !Array.isArray(result.body)) {
-    console.error('GET /api/orders/:id/files: request completed', { orderId: id, status: result.status });
-    return NextResponse.json(result.body ?? { error: 'files_unavailable' }, {
-      status: result.status === 200 ? 502 : result.status,
+  if (!result.ok) {
+    console.error('GET /api/orders/:id/files: request completed', {
+      orderId: id,
+      status: result.status,
     });
+    return NextResponse.json({ error: 'files_unavailable' }, { status: result.status });
   }
 
-  // Client-side links are not basePath-aware, so the /staff prefix is spelled out here.
-  const files: OrderFileLink[] = result.body.map((file) => ({
-    id: file.id,
-    originalFilename: file.originalFilename,
-    sizeBytes: file.sizeBytes,
-    uploadedAt: file.uploadedAt,
-    url: `${BASE_PATH}/api/orders/${id}/files/${file.id}`,
-  }));
-
-  console.log('GET /api/orders/:id/files: request completed', { orderId: id, fileCount: files.length });
-  return NextResponse.json({ files }, { status: 200 });
+  console.log('GET /api/orders/:id/files: request completed', {
+    orderId: id,
+    fileCount: result.files.length,
+  });
+  return NextResponse.json({ files: result.files }, { status: 200 });
 }
