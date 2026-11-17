@@ -1877,3 +1877,157 @@ main .kanban-column h2 {
     padding: 1.1rem;
   }
 }
+
+/* -------------------- Print --------------------
+   The order detail page doubles as the job ticket that goes in the bag, so printing is a
+   restyle of the page rather than a separate print route: nothing can drift out of sync with
+   what staff saw on screen. The Print button (components/PrintOrderButton.tsx) just calls
+   window.print(), so Ctrl+P gives exactly the same sheet.
+
+   Scoped to no particular page on purpose -- hiding the header nav and page actions is right
+   for anything a staff member prints, and .detail-side only exists on the order page. */
+@media print {
+  /* Redefine the palette instead of restyling each component: the console follows the OS into
+     dark mode, and a staff member printing from there would otherwise get white-on-charcoal --
+     an unreadable sheet and a spent toner cartridge.
+     `prefers-color-scheme: dark` still matches while printing, so this has to out-specify the
+     dark block's own `:root:not([data-theme='light'])` (0,2,0) -- a bare `:root` (0,1,0) loses
+     to it and leaves --canvas/--paper dark. Repeating that exact selector ties the
+     specificity, and this block wins on source order. */
+  :root,
+  :root:not([data-theme='light']),
+  :root[data-theme='dark'],
+  :root[data-theme='light'] {
+    --ink: #000;
+    --ink-soft: #1a1a1a;
+    --muted: #444;
+    --paper: #fff;
+    --canvas: #fff;
+    --border: #999;
+    --border-strong: #666;
+    --crimson: #000;
+    --crimson-dark: #000;
+    --crimson-tint: #fff;
+    --crimson-tint-strong: #999;
+    --brand-surface: #000;
+    /* Band text is printed on white paper, not on crimson. */
+    --on-crimson: #000;
+    --on-crimson-soft: #1a1a1a;
+    --on-crimson-muted: #444;
+    --on-crimson-border: #999;
+    --shadow-sm: none;
+    --shadow-md: none;
+    color-scheme: light;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+
+  body {
+    color: #000;
+    background: #fff;
+  }
+
+  /* Screen furniture: none of it means anything on paper. The status form is interactive and
+     the page actions include the Print button itself. */
+  .site-header,
+  .page-band-actions,
+  .detail-side,
+  .step-meter,
+  .theme-toggle,
+  .account {
+    display: none !important;
+  }
+
+  /* The brand stripe that closes out every page on screen (body::after) is a solid crimson
+     bar -- pure wasted toner at the foot of a job ticket. */
+  body::after {
+    display: none;
+  }
+
+  /* The band is a full-bleed crimson arc on screen (100vw with a -50vw pull). On paper it is
+     just the ticket heading, so flatten it back into the flow. */
+  .page-band {
+    position: static;
+    left: auto;
+    width: auto;
+    margin: 0 0 1.25rem;
+    padding: 0 0 0.75rem;
+    color: #000;
+    background: none;
+    border-bottom: 2px solid #000;
+    border-radius: 0;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  main > :first-child:not(.page-band) {
+    margin-top: 0;
+  }
+
+  /* One column: the sidebar is hidden, so the grid has nothing to sit beside. */
+  .detail-grid {
+    display: block;
+  }
+
+  .detail-main {
+    display: block;
+  }
+
+  /* Cards are surfaces on screen; on paper a rule between sections reads better than a box,
+     and a section split across two sheets is worse than a slightly short page. */
+  .card,
+  main > form,
+  main > dl,
+  .table-scroll {
+    margin: 0 0 1.25rem;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .card > h2 {
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid #999;
+  }
+
+  /* .page-band .badge inverts to white-on-crimson for the band; undo that for paper. */
+  .badge,
+  .page-band .badge {
+    color: #000 !important;
+    background: none !important;
+    border: 1px solid #000 !important;
+  }
+
+  .spec-notes {
+    background: none;
+    border-left: 2px solid #000;
+  }
+
+  /* Each file is a filled tile on screen; on paper a plain bordered row is enough. */
+  .files-list li {
+    padding: 0.35rem 0;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid #999;
+    border-radius: 0;
+  }
+
+  /* Presigned MinIO URLs are enormous and expire in minutes, so print the filenames only --
+     never the href. */
+  .files-list a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  a[href]::after {
+    content: '';
+  }
+}

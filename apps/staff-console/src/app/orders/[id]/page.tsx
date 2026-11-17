@@ -4,6 +4,7 @@ import { ORDER_STATUS_LABELS, type Order } from '@crimson-copies/shared';
 import type { StaffMember } from '../../../components/OrderAssignmentTable';
 import { OrderFilesList } from '../../../components/OrderFilesList';
 import { PageBand } from '../../../components/PageBand';
+import { PrintOrderButton } from '../../../components/PrintOrderButton';
 import { StatusUpdateForm } from '../../../components/StatusUpdateForm';
 import { StepMeter } from '../../../components/StepMeter';
 import { callOrdersApi } from '../../../lib/internal-api';
@@ -47,9 +48,12 @@ export default async function OrderDetailPage({ params }: PageProps) {
           </p>
         }
         actions={
-          <Link href="/" className="btn btn-on-crimson">
-            Back to queue
-          </Link>
+          <>
+            <PrintOrderButton />
+            <Link href="/" className="btn btn-on-crimson">
+              Back to queue
+            </Link>
+          </>
         }
       />
 
