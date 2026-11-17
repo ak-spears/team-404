@@ -80,7 +80,11 @@ function searchableText(order: Order): string {
     `#${orderNumber(order)}`,
     String(orderNumber(order)),
     SERVICE_DETAILS[order.serviceType].title,
-    // The raw enum too, so "resume_portfolio" pasted from a URL or a staff email still hits.
+    // The raw enum both ways, so "resume_portfolio" pasted from a URL or a staff email hits,
+    // and so does "resume portfolio" typed out. The underscore form has to be indexed
+    // verbatim: a query is only ever split on whitespace, so "resume_portfolio" stays one
+    // term and would never match the spaced form on its own.
+    order.serviceType,
     order.serviceType.replace(/_/g, ' '),
     ORDER_STATUS_LABELS[order.status],
     order.specNotes ?? '',
