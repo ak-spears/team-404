@@ -11,7 +11,15 @@ import {
 } from '@crimson-copies/shared';
 import { calculatePriceCents } from '@crimson-copies/shared';
 import type { Db } from '../db/client.js';
-import { customers, googleIdentities, orderEvents, orderFiles, orders, orderUploadCredentials, users } from '../db/schema.js';
+import {
+  customers,
+  googleIdentities,
+  orderEvents,
+  orderFiles,
+  orders,
+  orderUploadCredentials,
+  users,
+} from '../db/schema.js';
 
 const UPLOAD_CREDENTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -93,7 +101,7 @@ export interface RegisterUploadedFileResult {
 export type VerifyUploadCredentialResult = { valid: true; orderId: number } | { valid: false };
 
 export type VerifyUserCredentialsResult =
-  | { valid: true; userId: number; username: string; role: 'customer' | 'staff' }
+  | { valid: true; userId: number; username: string; role: 'customer' | 'staff' | 'admin' }
   | { valid: false };
 
 export interface UpdateOrderStatusParams {
@@ -137,7 +145,9 @@ export interface OrdersRepository {
   listOrderFiles(orderId: number): Promise<OrderFileRecord[]>;
   /** One file, only if it belongs to `orderId` -- a file id alone never identifies a file. */
   getOrderFile(orderId: number, fileId: number): Promise<OrderFileRecord | null>;
-  registerUploadedFile(params: RegisterUploadedFileParams): Promise<RegisterUploadedFileResult | null>;
+  registerUploadedFile(
+    params: RegisterUploadedFileParams,
+  ): Promise<RegisterUploadedFileResult | null>;
   verifyUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   /**
    * Non-consuming variant of the above, for the web upload path: it proves the caller holds
@@ -147,26 +157,37 @@ export interface OrdersRepository {
    */
   checkUploadCredential(username: string, password: string): Promise<VerifyUploadCredentialResult>;
   verifyUserCredentials(username: string, password: string): Promise<VerifyUserCredentialsResult>;
+  getStripeCustomerId(userId: number): Promise<string | null>;
+  setStripeCustomerId(userId: number, stripeCustomerId: string): Promise<boolean>;
 
   /** Looks up a user by their linked Google account, creating a new customer account on first sign-in. */
-  verifyOrCreateGoogleUser(input: {
-    googleId: string;
-    email: string;
-    name?: string;
-  }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
+  verifyOrCreateGoogleUser(input: { googleId: string; email: string; name?: string }): Promise<{
+    valid: true;
+    userId: number;
+    username: string;
+    role: 'customer' | 'staff' | 'admin';
+  }>;
 
   /** Looks up a user by their verified Auth0 email, creating a new customer account on first sign-in. */
-  verifyOrCreateAuth0User(input: {
-    email: string;
-  }): Promise<{ valid: true; userId: number; username: string; role: 'customer' | 'staff' }>;
+  verifyOrCreateAuth0User(input: { email: string }): Promise<{
+    valid: true;
+    userId: number;
+    username: string;
+    role: 'customer' | 'staff' | 'admin';
+  }>;
 
   /** Strict staff-only Auth0 check: the email must map to an existing staff-role user. */
   verifyAuth0StaffUser(input: {
     email: string;
-  }): Promise<{ valid: true; userId: number; username: string; role: 'staff' } | { valid: false }>;
+  }): Promise<
+    { valid: true; userId: number; username: string; role: 'staff' | 'admin' } | { valid: false }
+  >;
 
   /** Stores a CWID on the user. Always overwrites (non-UA Google logins re-collect every time). */
-  setUserCwid(userId: number, cwid: string): Promise<{ userId: number; username: string; role: 'customer' | 'staff' } | null>;
+  setUserCwid(
+    userId: number,
+    cwid: string,
+  ): Promise<{ userId: number; username: string; role: 'customer' | 'staff' | 'admin' } | null>;
 
   updateOrderStatus(params: UpdateOrderStatusParams): Promise<OrderRecord | null>;
   assignOrder(params: AssignOrderParams): Promise<OrderRecord | null>;
@@ -179,7 +200,6 @@ export interface OrdersRepository {
     payload?: Record<string, unknown>,
   ): Promise<void>;
 }
-
 
 /**
  * Generates a one-time SFTP upload password. Not a bcrypt input constraint -- just needs to be
@@ -211,6 +231,18 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
   }
 
   return {
+    async getStripeCustomerId(userId) {
+      const [user] = await db
+        .select({ stripeCustomerId: users.stripeCustomerId })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      return user?.stripeCustomerId ?? null;
+    },
+    async setStripeCustomerId(userId, stripeCustomerId) {
+      const result = await db.update(users).set({ stripeCustomerId }).where(eq(users.id, userId));
+      return result[0].affectedRows > 0;
+    },
     async listStaffMembers() {
       return db
         .select({ id: users.id, username: users.username })
@@ -337,18 +369,17 @@ export function createOrdersRepository(db: Db, bcryptRounds: number): OrdersRepo
     },
 
     async listOrders(filter) {
-  const conditions = [];
+      const conditions = [];
 
-if (filter.status) {
-  conditions.push(eq(orders.status, filter.status));
-}
+      if (filter.status) {
+        conditions.push(eq(orders.status, filter.status));
+      }
 
-if (filter.assignedTo !== undefined) {
-  conditions.push(eq(orders.assignedTo, filter.assignedTo));
-}
+      if (filter.assignedTo !== undefined) {
+        conditions.push(eq(orders.assignedTo, filter.assignedTo));
+      }
 
-
-/*
+      /*
     async listOrders(filter) {
       const conditions = [];
       if (filter.status) conditions.push(eq(orders.status, filter.status));
@@ -412,7 +443,11 @@ if (filter.assignedTo !== undefined) {
 
     async registerUploadedFile(params) {
       const res = await db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         await tx.insert(orderFiles).values({
@@ -439,7 +474,10 @@ if (filter.assignedTo !== undefined) {
         // already-files_received order.
         let statusChanged = false;
         if (isValidStatusTransition(order.status, 'files_received')) {
-          await tx.update(orders).set({ status: 'files_received' }).where(eq(orders.id, params.orderId));
+          await tx
+            .update(orders)
+            .set({ status: 'files_received' })
+            .where(eq(orders.id, params.orderId));
           await tx.insert(orderEvents).values({
             orderId: params.orderId,
             eventType: 'status_changed',
@@ -482,7 +520,9 @@ if (filter.assignedTo !== undefined) {
       const [credential] = await db
         .select()
         .from(orderUploadCredentials)
-        .where(and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)))
+        .where(
+          and(eq(orderUploadCredentials.username, username), isNull(orderUploadCredentials.usedAt)),
+        )
         .limit(1);
 
       if (!credential || credential.expiresAt.getTime() < Date.now()) {
@@ -495,7 +535,9 @@ if (filter.assignedTo !== undefined) {
       const [updateResult] = await db
         .update(orderUploadCredentials)
         .set({ usedAt: new Date() })
-        .where(and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)));
+        .where(
+          and(eq(orderUploadCredentials.id, credential.id), isNull(orderUploadCredentials.usedAt)),
+        );
       if (updateResult.affectedRows === 0) {
         // Lost the race to another concurrent verify call for the same one-time credential.
         return { valid: false };
@@ -504,9 +546,14 @@ if (filter.assignedTo !== undefined) {
       return { valid: true, orderId: credential.orderId };
     },
 
-    async verifyUserCredentials(username, password) { //Google auth version
+    async verifyUserCredentials(username, password) {
+      //Google auth version
       const normalizedUsername = username.trim().toLowerCase();
-      const [user] = await db.select().from(users).where(eq(users.username, normalizedUsername)).limit(1);
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, normalizedUsername))
+        .limit(1);
       if (!user) return { valid: false };
 
       if (!user.passwordHash) return { valid: false };
@@ -517,8 +564,7 @@ if (filter.assignedTo !== undefined) {
       return { valid: true, userId: user.id, username: user.username, role: user.role };
     },
 
-
-        async verifyOrCreateGoogleUser({ googleId, email }) {
+    async verifyOrCreateGoogleUser({ googleId, email }) {
       // Check if this Google account is already linked to a user.
       const [existingIdentity] = await db
         .select()
@@ -758,7 +804,11 @@ if (filter.assignedTo !== undefined) {
 
     async assignOrder(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         if (params.assignedTo !== null) {
@@ -787,14 +837,22 @@ if (filter.assignedTo !== undefined) {
           },
         });
 
-        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [updated] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         return updated ?? null;
       });
     },
 
     async updateOrderStatus(params) {
       return db.transaction(async (tx) => {
-        const [order] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         if (!order) return null;
 
         if (!isValidStatusTransition(order.status, params.status)) {
@@ -827,7 +885,11 @@ if (filter.assignedTo !== undefined) {
           payloadJson: { from: order.status, to: params.status },
         });
 
-        const [updated] = await tx.select().from(orders).where(eq(orders.id, params.orderId)).limit(1);
+        const [updated] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.orderId))
+          .limit(1);
         return updated ?? null;
       });
     },
@@ -835,5 +897,3 @@ if (filter.assignedTo !== undefined) {
     recordEvent,
   };
 }
-
-

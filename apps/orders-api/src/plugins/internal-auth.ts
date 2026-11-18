@@ -9,7 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
  * is trusted only because of that boundary, not because it is itself unforgeable.
  */
 export interface InternalUser {
-  role?: 'customer' | 'staff';
+  role?: 'customer' | 'staff' | 'admin';
   id?: string;
 }
 
@@ -19,7 +19,7 @@ declare module 'fastify' {
   }
 }
 
-const VALID_ROLES = new Set<InternalUser['role']>(['customer', 'staff']);
+const VALID_ROLES = new Set<InternalUser['role']>(['customer', 'staff', 'admin']);
 
 /**
  * Constant-time string comparison for the shared internal-key boundary the whole design rests
@@ -70,9 +70,9 @@ export function createRequireInternalKey(internalApiKey: string) {
 
     request.internalUser = { role, id };
     console.log('INTERNAL AUTH:', {
-    role,
-    id,
-    path: request.url,
+      role,
+      id,
+      path: request.url,
     });
   };
 }

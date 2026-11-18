@@ -29,6 +29,13 @@
       "when": 1793111146547,
       "tag": "0003_add_customer_order_number",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795032000000,
+      "tag": "0004_add_stripe_customer_id",
+      "breakpoints": true
     }
   ]
 }

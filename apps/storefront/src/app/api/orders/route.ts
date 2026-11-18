@@ -20,15 +20,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const user = await getAuthenticatedUser();
-
-  const result = await callOrdersApi<OrderCreateResult>({
-    method: 'POST',
-    path: '/api/orders',
-    role: user.role,
-    userId: user.userId,
-    body: parsed.data,
-  });
+  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>;
+  let result: Awaited<ReturnType<typeof callOrdersApi<OrderCreateResult>>>;
+  try {
+    user = await getAuthenticatedUser();
+    result = await callOrdersApi<OrderCreateResult>({
+      method: 'POST',
+      path: '/api/orders',
+      role: user.role,
+      userId: user.userId,
+      body: parsed.data,
+    });
+  } catch (err) {
+    console.error('POST /api/orders: upstream request failed', err);
+    return NextResponse.json({ error: 'order_service_unavailable' }, { status: 502 });
+  }
 
   console.log('POST /api/orders: request completed', {
     status: result.status,
