@@ -1,7 +1,9 @@
 'use client';
 
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   calculatePriceCents,
   PAYMENT_METHODS,
@@ -18,7 +20,8 @@ import { FileDrop } from './FileDrop';
 import { FormStep } from './FormStep';
 import { QuantityStepper } from './QuantityStepper';
 
-/** The upload credential is not in this response -- the BFF keeps it in an HttpOnly cookie. */
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
+
 interface OrderCreateResponse {
   orderId: number;
   customerOrderNumber?: number | null;
@@ -30,6 +33,32 @@ function isOrderCreateResponse(value: unknown): value is OrderCreateResponse {
     value !== null &&
     typeof (value as { orderId?: unknown }).orderId === 'number'
   );
+}
+
+interface SavedCardSummary {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+function isSavedCardResponse(value: unknown): value is { saved: true } & SavedCardSummary {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.saved === true &&
+    typeof v.brand === 'string' &&
+    typeof v.last4 === 'string' &&
+    typeof v.expMonth === 'number' &&
+    typeof v.expYear === 'number'
+  );
+}
+
+function describeCard(card: SavedCardSummary): string {
+  const brand = card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+  const month = String(card.expMonth).padStart(2, '0');
+  const year = String(card.expYear).slice(-2);
+  return `${brand} •••• ${card.last4} (expires ${month}/${year})`;
 }
 
 // Fixed-price services first; quoted ones (department jobs) last.
@@ -58,7 +87,18 @@ interface OrderFormProps {
 
 /** The order form. Submits to the storefront's own BFF route. */
 export function OrderForm({ initialService, defaultName = '', defaultEmail = '' }: OrderFormProps) {
+  return (
+    <OrderFormInner
+      initialService={initialService}
+      defaultName={defaultName}
+      defaultEmail={defaultEmail}
+    />
+  );
+}
+
+function OrderFormInner({ initialService, defaultName = '', defaultEmail = '' }: OrderFormProps) {
   const router = useRouter();
+
   const [serviceType, setServiceType] = useState<ServiceType>(initialService ?? SERVICE_TYPES[0]);
   const [quantity, setQuantity] = useState(1);
   const [specNotes, setSpecNotes] = useState('');
@@ -69,11 +109,84 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [placedOrderNumber, setPlacedOrderNumber] = useState<number | null>(null);
-  // The file is chosen here but can only be uploaded once the order exists -- order_files rows
-  // reference an order id -- so it is held until POST /api/orders returns one.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const [savedCard, setSavedCard] = useState<SavedCardSummary | null>(null);
+  const [savedCardChecked, setSavedCardChecked] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardSetupClientSecret, setCardSetupClientSecret] = useState<string | null>(null);
+  const [saveCardForFuture, setSaveCardForFuture] = useState(false);
+  const [cardStripe, setCardStripe] = useState<Stripe | null>(null);
+  const [cardElements, setCardElements] = useState<StripeElements | null>(null);
+  const handleCardReady = useCallback((stripe: Stripe | null, elements: StripeElements | null) => {
+    setCardStripe(stripe);
+    setCardElements(elements);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/saved-card');
+        const data: unknown = await res.json().catch(() => null);
+        if (!cancelled && res.ok && isSavedCardResponse(data)) {
+          setSavedCard({
+            brand: data.brand,
+            last4: data.last4,
+            expMonth: data.expMonth,
+            expYear: data.expYear,
+          });
+        }
+      } catch {
+        // Lookup failed: show the card form. Worst case the customer enters a card again.
+      } finally {
+        if (!cancelled) setSavedCardChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paymentMethod !== 'card' || savedCard || !savedCardChecked) {
+      setCardSetupClientSecret(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/saved-card/setup-intent', { method: 'POST' });
+        const data: unknown = await res.json().catch(() => null);
+        const clientSecret =
+          typeof data === 'object' && data !== null
+            ? (data as { clientSecret?: unknown }).clientSecret
+            : undefined;
+
+        if (!cancelled && res.ok && typeof clientSecret === 'string') {
+          setCardSetupClientSecret(clientSecret);
+          return;
+        }
+
+        if (!cancelled) {
+          setCardSetupClientSecret(null);
+          setCardError('Could not load the card form. Please try again.');
+        }
+      } catch {
+        if (!cancelled) {
+          setCardSetupClientSecret(null);
+          setCardError('Could not load the card form. Please try again.');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentMethod, savedCard, savedCardChecked]);
 
   const service = SERVICE_DETAILS[serviceType];
   const unitCents = PRICING_TABLE_CENTS[serviceType];
@@ -91,8 +204,42 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
     setPendingFile(file);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
+  async function saveCardWithStripe(): Promise<boolean> {
+    if (!cardStripe || !cardElements) {
+      setCardError('The card form is still loading. Try again in a moment.');
+      return false;
+    }
+
+    const { error: submitError } = await cardElements.submit();
+    if (submitError) {
+      setCardError(submitError.message ?? 'Check your card details and try again.');
+      return false;
+    }
+
+    const res = await fetch('/api/saved-card/setup-intent', { method: 'POST' });
+    const data: unknown = await res.json().catch(() => null);
+    const clientSecret =
+      typeof data === 'object' && data !== null
+        ? (data as { clientSecret?: unknown }).clientSecret
+        : undefined;
+    if (!res.ok || typeof clientSecret !== 'string') {
+      setCardError('Could not start saving your card. Please try again.');
+      return false;
+    }
+
+    const { error: confirmError } = await cardStripe.confirmSetup({
+      elements: cardElements,
+      clientSecret,
+      redirect: 'if_required',
+    });
+    if (confirmError) {
+      setCardError(confirmError.message ?? 'Could not save your card. Please try again.');
+      return false;
+    }
+    return true;
+  }
+
+  async function placeOrder(): Promise<void> {
     setSubmitting(true);
     setError(null);
 
@@ -111,9 +258,20 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
         }),
       });
 
-      const body: unknown = await response.json();
+      const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        setError('Could not submit your order. Please check the form and try again.');
+        const serverError =
+          typeof body === 'object' &&
+          body !== null &&
+          'error' in body &&
+          typeof body.error === 'string'
+            ? body.error.replaceAll('_', ' ')
+            : null;
+        setError(
+          serverError
+            ? `Order failed: ${serverError}. Please try again.`
+            : 'Could not submit your order. Please check the form and try again.',
+        );
         return;
       }
       if (!isOrderCreateResponse(body)) {
@@ -124,11 +282,6 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
         orderNumber({ id: body.orderId, customerOrderNumber: body.customerOrderNumber ?? null }),
       );
 
-      // One action for the customer, two requests underneath. A failure here is reported as
-      // "the order was placed, the file wasn't" -- never as a failed order, which would leave
-      // someone unsure whether they had ordered anything at all. Either way the customer ends
-      // up on the order's own page, which reloads the order and its files on every visit, so a
-      // refresh never drops them back onto an empty form.
       const outcomeQuery = new URLSearchParams();
       if (pendingFile) {
         setUploadPercent(0);
@@ -149,6 +302,32 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setCardError(null);
+
+    if (paymentMethod === 'card' && !savedCard) {
+      if (!savedCardChecked) {
+        setCardError('Still loading your payment info. Try again in a moment.');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        if (saveCardForFuture) {
+          const saved = await saveCardWithStripe();
+          if (!saved) return;
+        }
+      } catch {
+        setCardError('Network error -- please try again.');
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    await placeOrder();
+  }
+
   if (placedOrderNumber !== null) {
     return (
       <section className="order-placed" role="status">
@@ -167,6 +346,15 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
       </section>
     );
   }
+
+  const cardElementsOptions = cardSetupClientSecret
+    ? {
+        clientSecret: cardSetupClientSecret,
+        appearance: {
+          theme: 'stripe' as const,
+        },
+      }
+    : undefined;
 
   return (
     <section className="order-builder">
@@ -256,6 +444,50 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
               value={paymentMethod}
               onChange={setPaymentMethod}
             />
+
+            {paymentMethod === 'card' && savedCard && (
+              <div className="saved-card">
+                <p>
+                  Using your saved card: <strong>{describeCard(savedCard)}</strong>
+                </p>
+                <button type="button" className="btn-secondary" onClick={() => setSavedCard(null)}>
+                  Use a different card
+                </button>
+              </div>
+            )}
+
+            {paymentMethod === 'card' && !savedCard && savedCardChecked && (
+              <div className="card-fields">
+                {cardSetupClientSecret ? (
+                  <>
+                    <Elements stripe={stripePromise} options={cardElementsOptions}>
+                      <SetupCardFields onReady={handleCardReady} />
+                    </Elements>
+                    <label className="save-card-toggle">
+                      <input
+                        type="checkbox"
+                        checked={saveCardForFuture}
+                        onChange={(event) => setSaveCardForFuture(event.target.checked)}
+                      />
+                      Save this card for future orders
+                    </label>
+                  </>
+                ) : (
+                  <div className="summary-note">{cardError ?? 'Loading payment details…'}</div>
+                )}
+                {cardSetupClientSecret && (
+                  <p className="summary-note">
+                    Your card is stored securely by Stripe only if you choose to save it.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {paymentMethod === 'card' && cardError && (
+              <p className="error" role="alert">
+                {cardError}
+              </p>
+            )}
           </FormStep>
         </div>
 
@@ -288,6 +520,21 @@ export function OrderForm({ initialService, defaultName = '', defaultEmail = '' 
       </form>
     </section>
   );
+}
+
+function SetupCardFields({
+  onReady,
+}: {
+  onReady: (stripe: Stripe | null, elements: StripeElements | null) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+
+  useEffect(() => {
+    onReady(stripe, elements);
+  }, [stripe, elements, onReady]);
+
+  return <PaymentElement options={{ layout: 'tabs' }} />;
 }
 
 function SummaryLine({ label, value }: { label: string; value: string | number }) {

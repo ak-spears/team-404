@@ -27,7 +27,8 @@ export const users = mysqlTable('users', {
   passwordHash: varchar('password_hash', { length: 255 }),
   // Campus-Wide ID -- required for non-UA Google accounts; null for @ua.edu / @crimson.ua.edu.
   cwid: varchar('cwid', { length: 32 }),
-  role: mysqlEnum('role', ['customer', 'staff']).notNull(),
+  stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+  role: mysqlEnum('role', ['customer', 'staff', 'admin']).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -35,7 +36,9 @@ export const customers = mysqlTable('customers', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),
   // Nullable: a guest order (no signed-in user) still gets a customers row, with user_id left
   // null, so the customerName/email/phone from POST /api/orders has somewhere to persist.
-  userId: bigint('user_id', { mode: 'number' }).unique().references(() => users.id),
+  userId: bigint('user_id', { mode: 'number' })
+    .unique()
+    .references(() => users.id),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 32 }),
@@ -53,14 +56,10 @@ export const orders = mysqlTable('orders', {
   priceCents: int('price_cents'),
   status: mysqlEnum('status', ORDER_STATUSES).notNull().default('submitted'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .onUpdateNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
   pickupReadyAt: timestamp('pickup_ready_at'),
   completedAt: timestamp('completed_at'),
 });
-
 
 export const orderUploadCredentials = mysqlTable('order_upload_credentials', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),
@@ -101,8 +100,6 @@ export const orderEvents = mysqlTable('order_events', {
   payloadJson: json('payload_json'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
-
-
 
 export const googleIdentities = mysqlTable('google_identities', {
   id: bigint('id', { mode: 'number' }).primaryKey().autoincrement(),

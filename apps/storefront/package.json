@@ -13,10 +13,13 @@
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.30.0",
     "@crimson-copies/shared": "workspace:*",
+    "@stripe/react-stripe-js": "^7.0.1",
+    "@stripe/stripe-js": "^10.2.1",
     "minio": "^8.0.7",
     "next": "15.5.23",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "stripe": "^23.1.0",
     "zod": "^4.0.1"
   },
   "devDependencies": {

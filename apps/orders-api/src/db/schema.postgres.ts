@@ -12,7 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { UPLOAD_METHODS } from '@crimson-copies/shared';
 
-export const userRoleEnum = pgEnum('user_role', ['customer', 'staff']);
+export const userRoleEnum = pgEnum('user_role', ['customer', 'staff', 'admin']);
 export const serviceTypeEnum = pgEnum('service_type', [
   'poster',
   'resume_portfolio',
@@ -38,48 +38,50 @@ export const users = pgTable('users', {
   username: varchar('username', { length: 64 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }),
   cwid: varchar('cwid', { length: 20 }),
+  stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
   role: userRoleEnum('role').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
 export const customers = pgTable('customers', {
   id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
-  userId: bigint('user_id', { mode: 'number' }).unique().references(() => users.id),
+  userId: bigint('user_id', { mode: 'number' })
+    .unique()
+    .references(() => users.id),
   name: varchar('name', { length: 255 }).notNull(),
   // Intentionally not unique; existing guest orders include repeated customer emails.
   email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 32 }),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
-export const orders = pgTable('orders', {
-  id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
-  assignedTo: bigint('assigned_to', { mode: 'number' }),
-  customerId: bigint('customer_id', { mode: 'number' }).references(() => customers.id),
-  // 1, 2, 3... per signed-in customer, so their 4th order reads "#4" instead of the global id.
-  // Null for guest orders, which have no lasting customer to count against.
-  customerOrderNumber: integer('customer_order_number'),
-  serviceType: serviceTypeEnum('service_type').notNull(),
-  quantity: integer('quantity').notNull().default(1),
-  specNotes: text('spec_notes'),
-  paymentMethod: paymentMethodEnum('payment_method').notNull(),
-  priceCents: integer('price_cents'),
-  status: orderStatusEnum('status').notNull().default('submitted'),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
-  pickupReadyAt: timestamp('pickup_ready_at', { withTimezone: true, mode: 'date' }),
-  completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
-}, (table) => [
-  uniqueIndex('orders_customer_order_number_unique').on(table.customerId, table.customerOrderNumber),
-]);
+export const orders = pgTable(
+  'orders',
+  {
+    id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
+    assignedTo: bigint('assigned_to', { mode: 'number' }),
+    customerId: bigint('customer_id', { mode: 'number' }).references(() => customers.id),
+    // 1, 2, 3... per signed-in customer, so their 4th order reads "#4" instead of the global id.
+    // Null for guest orders, which have no lasting customer to count against.
+    customerOrderNumber: integer('customer_order_number'),
+    serviceType: serviceTypeEnum('service_type').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    specNotes: text('spec_notes'),
+    paymentMethod: paymentMethodEnum('payment_method').notNull(),
+    priceCents: integer('price_cents'),
+    status: orderStatusEnum('status').notNull().default('submitted'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    pickupReadyAt: timestamp('pickup_ready_at', { withTimezone: true, mode: 'date' }),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    uniqueIndex('orders_customer_order_number_unique').on(
+      table.customerId,
+      table.customerOrderNumber,
+    ),
+  ],
+);
 
 export const orderUploadCredentials = pgTable('order_upload_credentials', {
   id: bigint('id', { mode: 'number' }).generatedByDefaultAsIdentity().primaryKey(),
@@ -102,9 +104,7 @@ export const orderFiles = pgTable('order_files', {
   originalFilename: varchar('original_filename', { length: 255 }).notNull(),
   sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
   uploadedVia: uploadMethodEnum('uploaded_via').notNull().default('sftp'),
-  uploadedAt: timestamp('uploaded_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
 export const orderEvents = pgTable('order_events', {
@@ -115,9 +115,7 @@ export const orderEvents = pgTable('order_events', {
   eventType: varchar('event_type', { length: 64 }).notNull(),
   actor: orderEventActorEnum('actor').notNull(),
   payloadJson: jsonb('payload_json'),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
 export const googleIdentities = pgTable('google_identities', {
@@ -128,9 +126,7 @@ export const googleIdentities = pgTable('google_identities', {
     .references(() => users.id),
   googleId: varchar('google_id', { length: 255 }).notNull().unique(),
   email: varchar('email', { length: 255 }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
 export const googleIdentitiesRelations = relations(googleIdentities, ({ one }) => ({

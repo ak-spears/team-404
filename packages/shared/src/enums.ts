@@ -35,7 +35,7 @@ export type OrderEventActor = (typeof ORDER_EVENT_ACTORS)[number];
 export const UPLOAD_METHODS = ['sftp', 'web'] as const;
 export type UploadMethod = (typeof UPLOAD_METHODS)[number];
 
-export const USER_ROLES = ['customer', 'staff'] as const;
+export const USER_ROLES = ['customer', 'staff', 'admin'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const EMAIL_TEMPLATES = [
